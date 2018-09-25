@@ -51,4 +51,7 @@ crs(map) <- "+proj=longlat +datum=WGS84"
 # Aggregate, as writeRaster disaggregates (why? do not know...)
 map=aggregate(map,fact=2,fun=mean,expand=TRUE)
 writeRaster(map, paste0(destFolder,fileName,".tiff"), "GTiff",overwrite=TRUE,options="COMPRESS=LZW",datatype='INT2S')
+
+file.remove(paste0(destFolder,fileName,'.jpg'))
+file.remove(paste0(destFolder,fileName,'.json'))
 }
