@@ -9,36 +9,37 @@
 # wps.in: id = destFolder, type = string, title = Destination folder (to store the image)., value = "/home/ptaconet/react/r_bingmaps/";
 # wps.out: id = , type = image, title = Georeferenced image in TIF format, value = "";
 
-
+#apiKey = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="")
+#center_x=6.7098
+#center_y=45.8739
+#mapsize_width=2000  #max: 2000
+#mapsize_height=1500 # max: 1500
+#imagerySet="Aerial"
+#zoomLevel=19
+#destFolder="/home/ptaconet/react/r_bingmaps/"
+#fileName="r_bingmaps"
+  
+download_and_georeference_bingmaps_data<-function(apiKey,center_x,center_y,mapsize_width,mapsize_height,imagerySet,zoomLevel,destFolder,fileName){
 ## Load useful libraries
 library(raster)
 library(rjson)
 library(rgdal)
 
-apiKey = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="")
-center_x=6.7098
-center_y=45.8739
-mapsize_width=2000  #max: 2000
-mapsize_height=1500 # max: 1500
-imagerySet="Aerial"
-zoomLevel=19
-destFolder="/home/ptaconet/react/r_bingmaps/"
-
 ## First download image and metadata 
 # Download image
-y = paste0("http://dev.virtualearth.net/REST/v1/Imagery/Map/",imagerySet,"/",center_y,",",center_x,"/",zoomLevel,"?mapSize=",mapsize_width,",",mapsize_height,"&format=png&key=",apiKey)
-download.file(y,paste0(destFolder,'r_bingmaps.png'), mode = 'wb')
+y = paste0("http://dev.virtualearth.net/REST/v1/Imagery/Map/",imagerySet,"/",center_y,",",center_x,"/",zoomLevel,"?mapSize=",mapsize_width,",",mapsize_height,"&format=jpeg&key=",apiKey)
+download.file(y,paste0(destFolder,fileName,'.jpg'), mode = 'wb')
 
 # Download metadata of the image (including bouding box: add mmd=1  see https://msdn.microsoft.com/en-us/library/ff701724.aspx for more info)
 y = paste0("http://dev.virtualearth.net/REST/v1/Imagery/Map/",imagerySet,"/",center_y,",",center_x,"/",zoomLevel,"?mapSize=",mapsize_width,",",mapsize_height,"&mmd=1&format=png&key=",apiKey)
-download.file(y,paste0(destFolder,'r_bingmaps.json'))
+download.file(y,paste0(destFolder,fileName,'.json'))
 
 ## Then georeference and save the image as tif
 # open image
-map <- stack(paste0(destFolder,'r_bingmaps.png')  )
+map <- stack(paste0(destFolder,fileName,'.jpg')  )
 
 # open metadata
-result <- fromJSON(file = paste0(destFolder,"r_bingmaps.json"))
+result <- fromJSON(file = paste0(destFolder,fileName,".json"))
 
 # To get the bounding box: result$resourceSets[[1]]$resources[[1]]$bbox
 xmin(map) <- result$resourceSets[[1]]$resources[[1]]$bbox[2]
@@ -47,4 +48,7 @@ ymin(map) <- result$resourceSets[[1]]$resources[[1]]$bbox[1]
 ymax(map) <- result$resourceSets[[1]]$resources[[1]]$bbox[3]
 crs(map) <- "+proj=longlat +datum=WGS84"
 
-writeRaster(map, paste0(destFolder,"r_bingmaps.tiff"), "GTiff",overwrite=TRUE)
+# Aggregate, as writeRaster disaggregates (why? do not know...)
+map=aggregate(map,fact=2,fun=mean,expand=TRUE)
+writeRaster(map, paste0(destFolder,fileName,".tiff"), "GTiff",overwrite=TRUE,options="COMPRESS=LZW",datatype='INT2S')
+}
