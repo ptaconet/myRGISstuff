@@ -1,4 +1,6 @@
-# R scripts developed in the frame of the REACT project (« Gestion de la résistance aux insecticides au Burkina Faso et en Côte d’Ivoire : Recherche sur les stratégies de lutte anti-vectorielle »)
+# R scripts developed in the frame of the REACT project   (« Gestion de la résistance aux insecticides au Burkina Faso et en Côte d’Ivoire : Recherche sur les stratégies de lutte anti-vectorielle »)
+
+## Satellite imagery - data pre-processing and processing (remote sensing)
 
   - *preprocess_spot_6_7_data.R* : This script performs a set of pre-processing operations on SPOT6/7 satellite imagery data downloaded in the GEOSUD portal (mosaicing + pansharpening + georeferencing). The user can parameterize the operations he/she wants to be computed. Note: the script uses ssytem commands and spatial libraries that might work only on Linux OS (particularly for georeferencing).
   
