@@ -7,7 +7,7 @@
 
 
 mosaic_tif_images<-function(path_to_input_tifs,path_to_output_tif){
-cat("in case there is no projection associated with the input tifs, R sends an error "ERROR: failed to load SRS definition from ..." . However, the mosaic tif is created (without any projection)")
+cat("in case there is no projection associated with the input tifs, R sends an error ERROR: failed to load SRS definition from ... . However, the mosaic tif is created (without any projection)")
 require(raster)
 #require(XML)
 require(gdalUtils)
