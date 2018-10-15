@@ -1,4 +1,7 @@
-# wps.des: id = create_10km_square_tif_from_bingmaps, title = Create a 10km square georeferenced .tif and an OGC geopackage using bing maps satellite imagery, abstract = Create a 10km square georeferenced tif and geopackage using bing maps satellite imagery at best available zoom (19, which corresponds to a resolution of approx. 0.5 cm);
+######################################################################
+##### 52North WPS annotations ##########
+######################################################################
+# wps.des: id = create_10km_square_tif_from_bingmaps, title = Create a 10km² georeferenced TIF + an OGC geopackage of a given AOI on Earth using Bing maps satellite imagery, abstract = Create a 10km² georeferenced TIF + a OGC Geopackage of a given AOI on Earth using Bing maps satellite imagery at best available zoom (19, which corresponds to a resolution of approx. 0.5 cm);
 # wps.in: id = kml_path, type = string, title = Path to the kml covering the area of study., value = "/home/ptaconet/REACT_BF.kml";
 # wps.in: id = apiKey, type = string, title = Bing API key. You need an account on the bing maps dev center to get a key. See https://www.bingmapsportal.com/ . To get the key: My account > my keys  and then copy and paste the key in a txt file , value = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="");
 # wps.in: id = imagerySet, type = string, title =  The type of imagery., value = " Aerial|AerialWithLabels|AerialWithLabelsOnDemand|CanvasDark|CanvasLight|CanvasGray|Road";
@@ -17,7 +20,7 @@ mapsize_width=1500  #max: 2000
 mapsize_height=1500 # max: 1500
 zoomLevel=19
 cell_size=10000 # width/height of the big tifs to create (unit: meters)
-
+epsg_utm=32630 # UTM EPSG of the AOI 
 
 # Install / call useful libraries
 if(!require(sf)){
@@ -50,13 +53,13 @@ source("https://raw.githubusercontent.com/ptaconet/r_react/master/download_and_g
 kml_sf <- st_read(kml_path)
 
 # Convert to EPSG 32630 (to get the units in meters instead of degrees). EPSG 32630 is the one covering our area of study (Burkina Faso and north Cote d'Ivoire)
-kml_sf <- st_transform(kml_sf,crs=32630)
+kml_sf <- st_transform(kml_sf,crs=epsg_utm)
 
 # Make grid over the bounding box. We want 10 km square grids, so as to be able to use them on the tablet. 
 grid_10km=st_make_grid(kml_sf,what="polygons",cellsize = cell_size)
 
-# We convert the grid to kml and we save it
-# st_write(st_transform(grid_10km,crs=4326),"/home/ptaconet/grid_10km.kml")
+# We convert the grid to geopackage and we save it
+st_write(st_transform(grid_10km,crs=4326),paste0(destFolder,"/BF_grid_10km.gpkg"))
 
 # Loop on each 10km square tile
 for (i in 1:length(grid_10km)){
@@ -68,6 +71,7 @@ grid_400m=st_make_grid(grid_10km[i],what="centers",cellsize = 400)
 
 grid_400m=st_transform(grid_400m,crs=4326)
 
+dir.create(file.path(destFolder, i))
 # Download all the tiles from bing maps servers and convert them as tif
 for (j in 1:length(grid_400m)){
   cat(paste0("downloading the data n° ",j, " over ",length(grid_400m)))
@@ -81,7 +85,8 @@ for (j in 1:length(grid_400m)){
                                                     destFolder=destFolder,
                                                     fileName=paste0(i,"_10km_",j)
   )
-  
+  file.copy(paste0(destFolder,"/",fileName,'.tif'),paste0(destFolder,"/",i,"/",fileName,'.tif'))
+  file.remove(paste0(destFolder,"/",fileName,'.tif'))
 }
 
 # make a big tif out of all the small tifs
@@ -89,15 +94,12 @@ cat("Creating the 10km x 10km tif")
 all_my_rasts <- list.files(path=destFolder, pattern =paste0(i,"_10km"), full.names=TRUE)
 all_my_rasts=as.vector(all_my_rasts)
 
-e<-extent(as.numeric(st_bbox(st_transform(grid_10km,crs=4326))$xmin),as.numeric(st_bbox(st_transform(grid_10km,crs=4326))$xmax),as.numeric(st_bbox(st_transform(grid_10km,crs=4326))$ymin),as.numeric(st_bbox(st_transform(grid_10km,crs=4326))$ymax))
-template <- raster(e)
-projection(template) <- '+proj=longlat +ellps=WGS84 +datum=WGS84 +no_defs'
-writeRaster(template, file=paste0(destFolder,"/",i,"_10km.tif"), format="GTiff",overwrite=TRUE)
-mosaic_rasters(gdalfile=all_my_rasts,dst_dataset=paste0(destFolder,"/",i,"_10km.tif"),of="GTiff")
+mosaic_tif_images(all_my_rasts,paste0(folder,"/",i,".tif"))
 
-## Convert the tif created to a raster in a geopackage.
+## Convert the tif created to a raster in a OGC Geopackage and build pyramids at various zoom levels .
 cat("Converting the tif to a geopackage file")
 system(paste0("gdal_translate -ot Byte -of GPKG ",destFolder,"/",i,"_10km.tif ",destFolder,"/",i,"_10km.gpkg -co APPEND_SUBDATASET=YES -co RASTER_TABLE=",i,"_10km"))
+cat("Building pyramids for quick rendering on GIS")
 system(paste0("gdaladdo --config OGR_SQLITE_SYNCHRONOUS OFF -r AVERAGE ",destFolder,"/",i,"_10km.gpkg 2 4 8 16 32 64 128 256"))
 
 }

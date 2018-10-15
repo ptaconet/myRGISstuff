@@ -1,4 +1,7 @@
-# wps.des: id = download_and_georeference_bingmaps_data, title = Download and georeference Bing maps data, abstract = Download and georeference Bing maps data using the Bing API. More info here: https://msdn.microsoft.com/en-us/library/ff701724.aspx;
+######################################################################
+##### 52North WPS annotations ##########
+######################################################################
+# wps.des: id = download_and_georeference_bingmaps_data, title = Download and georeference Bing maps data, abstract = Download and georeference Bing maps data covering an AOI (provided by the user). Outputs are georeferenced TIF files covering the AOI. This script uses the Bing API. More info here: https://msdn.microsoft.com/en-us/library/ff701724.aspx;
 # wps.in: id = apiKey, type = string, title = Bing API key. You need an account on the bing maps dev center to get a key. See https://www.bingmapsportal.com/ . To get the key: My account > my keys  and then copy and paste the key in a txt file , value = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="");
 # wps.in: id = center_x, type = numeric, title = Coordinate of the longitude where the map is centered , value = -3.4534;
 # wps.in: id = center_y, type = numeric, title = Coordinate of the latitude where the map is centered , value = 10.9203;
