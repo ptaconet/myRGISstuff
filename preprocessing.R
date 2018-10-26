@@ -1,45 +1,160 @@
-dem_folder="/home/ptaconet/react/SRTM_dem"
-otb_applications_path<-"/home/ptaconet/OTB-6.6.0-Linux64/bin"
+######################################################################
+##### 52North WPS annotations ##########
+######################################################################
+# wps.des: id = eo_images_preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries: the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/). The user should be aware that Some operations might work only on Linux OS.
+# wps.in: id = pan_tile_fusionning, type = boolean, title = Panchromatic images (PAN) are split into many tiles. Fusion tiles into 1 single TIF file? , value="TRUE|FALSE" ;
+# wps.in: id = pan_orthorectification, type = boolean, title = Orthorectify the panchromatic tiled image? , value="TRUE|FALSE" ;
+# wps.in: id = ms_orthorectification, type = boolean, title = Orthorectify the multispectral image? , value="TRUE|FALSE" ;
+# wps.in: id = ms_pansharpening, type = boolean, title = Pansharpen MS image ? , value="TRUE|FALSE"; 
+# wps.in: id = cloud_mask_generation, type = boolean, title = Some masks are included in the products delivered however they are not geo-refererenced. Generate a geo-referenced cloud mask ? , value="TRUE|FALSE"; 
+# wps.in: id = path_to_panImages_folder, type = string, title = Path to the folder where the PAN .TIF images are stored, value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A";
+# wps.in: id = path_to_msImage_folder, type = string, title = Path to the MS .TIF file, value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A/IMG_SPOT7_MS_201710111019265_SEN_SPOT7_20171012_1350131l9pjds0m4wzt_1_R1C1.TIF";
+# wps.in: id = path_to_msCloudMask_file, type = string, title = Path to the cloud mask file, value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A/MASKS/CLD_SPOT7_P_201710111019265_SEN_SPOT7_20171012_1350221m2hw3hzfkke0_1_MSK.GML";
+# wps.in: id = path_to_outputFiles_folder, type = string, title = Path to the folder where the new data will be stored. The folder will be created if not already existing in the system. , value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_108";
+# wps.in: id = outputImageName, type = string, title = Prefix use for the output files (i.e. files that will be generated in the workflow) , value = "SEN_SPOT7_20171012";
+# wps.in: id = path_to_path_to_dem_folder, type = string, title = Path to the folder containing the SRTM Digital Elevation Model files (the DEM is used for orthorectification). The DEM should be available in .hgt format. SRTM DEM can be easily downloaded here: http://dwtkns.com/srtm30m/, value = "/home/ptaconet/react/SRTM_dem";
+# wps.in: id = path_to_otbApplications_folder, type = string, title = Path to the folder containing the OTB applications. , value = "/home/ptaconet/OTB-6.6.0-Linux64/bin";
+# wps.out: id = output_zip, type = text/zip, title = ZIP file containing the following datasets : PAN_mosaic.tif : PAN mosaiced tif file / PAN_ortho.tif : PAN orthorectified tif file / MS_ortho.tif : MS orthorectified tif file / PANSHARPEN_ortho.TIF : MS pansherpened orthorectified tif file / CLDMASK_ortho.TIF : cloud mask georeferenced tif file / CLDMASK_ortho.shp : cloud mask georeferenced shapefile
 
-pan_tifs_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A"
-pan_cloudmask_path="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A/MASKS/CLD_SPOT7_P_201710111019265_SEN_SPOT7_20171012_1350221m2hw3hzfkke0_1_MSK.GML"
-ms_tif_file="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A/IMG_SPOT7_MS_201710111019265_SEN_SPOT7_20171012_1350131l9pjds0m4wzt_1_R1C1.TIF"
-output_zip_name="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_108"
-image_name="SEN_SPOT7_20171012"
+#### Additional informations on how Spot 6/7 images are delivered can be found on the SPOT 6/7 user guide available here: https://www.spaceoffice.nl/blobs/Dataportaal/User_Guide_SPOT6_V1.0.pdf ;
+
+
+### Variables to be set by the user
+# Workflow parameterization
+pan_tile_fusionning<-TRUE
+pan_orthorectification<-TRUE
+ms_orthorectification<-TRUE
+ms_pansharpening<-TRUE
+cloud_mask_generation<-TRUE
+
+# Paths to input data folders / files
+path_to_panImages_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A"
+path_to_msImage_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A"
+path_to_msCloudMask_file="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A/MASKS/CLD_SPOT7_MS_201710111019265_SEN_SPOT7_20171012_1350131l9pjds0m4wzt_1_MSK.GML"
+path_to_outputFiles_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_108"
+outputImageName="SPOT7_108_20171012_BF"
+path_to_dem_folder="/home/ptaconet/react/SRTM_dem"
+path_to_otbApplications_folder<-"/home/ptaconet/OTB-6.6.0-Linux64/bin"
+
+## Call useful packages
+library(sf)
+library(raster)
+library(dplyr)
 
 # Create folder to store data that will be generated
-dir.create(output_zip_name)
+dir.create(path_to_outputFiles_folder)
 
-path_to_output_pan_mosaic_tif=file.path(output_zip_name,paste0(image_name,"_PAN_mosaic.tif")) # Path to the output mosaic PAN tif
-path_to_output_pan_ortho_tif=file.path(output_zip_name,paste0(image_name,"_PAN_l1.tif")) # Path to the output mosaic PAN tif
-path_to_output_ms_ortho_tif=file.path(output_zip_name,paste0(image_name,"_MS_l1.tif")) # Path to the output MS tif
-path_to_output_ms_ortho_superimpose_tif=file.path(output_zip_name,paste0(image_name,"_MS_L1_superimpose.tif"))
-path_to_output_pansharpen_tif=file.path(output_zip_name,paste0(image_name,"_PANSHARPEN_l1.tif")) # Path to the output pansharpened tif
-path_to_output_pansharpen_gpkg=file.path(output_zip_name,paste0(image_name,"_PANSHARPEN.gpkg"))
+# Get or set useful paths
+path_to_output_pan_mosaic_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PAN_mosaic.TIF")) # Path to the output mosaic PAN tif
+path_to_output_pan_ortho_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PAN_ortho.TIF")) # Path to the output mosaic PAN tif orthorectified 
+path_to_output_ms_ortho_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_ortho.TIF")) # Path to the output MS tif orthorectified 
+path_to_output_pansharpen_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PANSHARPEN_ortho.TIF")) # Path to the output pansharpened tif orthorectified
+path_to_output_cloudmask_tif<-file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.TIF")) # Path to the output cloud mask tif orthorectified
+path_to_output_cloudmask_shp<-file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.shp")) # Path to the output cloud mask shapefile orthorectified
 
-path_to_output_pansharpen_ROI_tif=file.path(output_zip_name,paste0(image_name,"_PANSHARPEN_ROI.tif"))
+pan_tifs_paths=as.vector(list.files(path=path_to_panImages_folder,pattern=".TIF",full.names=TRUE)) 
+ms_tif_path=as.vector(list.files(path=path_to_msImage_folder,pattern=".TIF",full.names=TRUE))
+ms_tif_outputImageName=as.vector(list.files(path=path_to_msImage_folder,pattern=".TIF"))
 
-# 1.2) Mosaiquage des PAN
-pan_tifs_paths=as.vector(list.files(path=pan_tifs_folder,pattern=".TIF",full.names=TRUE)) # panchromatic tifs names
-output_file_name=list.files(path=pan_tifs_folder,pattern="DIM")
-output_file_name=gsub("DIM","IMG",output_file_name)
-output_file_name=gsub(".XML",".TIF",output_file_name)
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_Mosaic")," -il ",paste(pan_tifs_paths, collapse = ' ')," -out ",path_to_output_pan_mosaic_tif," uint16")
+
+### Start workflow
+
+######## 1.1) PAN tile fusionning ###########
+if (pan_tile_fusionning==TRUE){
+cat("Starting PAN tile fusionning ...")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(pan_tifs_paths, collapse = ' ')," -out ",path_to_output_pan_mosaic_tif," uint16")
+system(otb_appli)
+cat("PAN tile fusionning OK")
+}
+
+######## 1.2) PAN orthorectification ###########
+if (pan_orthorectification==TRUE){
+cat("Starting PAN orthorectification ...")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",path_to_output_pan_mosaic_tif,"?&skipcarto=true\""," -io.out ",path_to_output_pan_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
+system(otb_appli)
+cat("PAN orthorectification OK")
+}
+
+########### 2) MS orthorectification ###########
+if (ms_orthorectification==TRUE){
+cat("Starting MS orthorectification ...")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",path_ms_tif_with_cldmask,"?&skipcarto=true\""," -io.out ",path_to_output_ms_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
+system(otb_appli)
+cat("MS orthorectification OK")
+}
+
+########### 3) MS Pansharpening ###########
+if (ms_pansharpening==TRUE){
+cat("Starting MS Pansharpening ...")
+path_to_output_ms_ortho_superimpose_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_L1_superimpose.TIF"))
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Superimpose")," -inr ",path_to_output_pan_ortho_tif," -inm ",path_to_output_ms_ortho_tif," -out ",path_to_output_ms_ortho_superimpose_tif," uint16")
+system(otb_appli)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_BundleToPerfectSensor")," -inp ",path_to_output_pan_ortho_tif," -inxs ",path_to_output_ms_ortho_superimpose_tif," -out ",path_to_output_pansharpen_tif," uint16")
+system(otb_appli)
+file.remove(path_to_output_ms_ortho_superimpose_tif)
+cat("MS Pansharpening OK")
+}
+
+########### 4) Cloud mask creation (both in raster and vector formats) ###########
+if (cloud_mask_generation==TRUE){ 
+cat("Starting cloud mask creation ...")
+dimap_path=list.files(path=path_to_msImage_folder,pattern="DIM",full.names=TRUE)
+tfw_path=list.files(path=path_to_msImage_folder,pattern="TFW",full.names=TRUE)
+rpc_path=list.files(path=path_to_msImage_folder,pattern="RPC",full.names=TRUE)
+file.copy(from = dimap_path, to = path_to_outputFiles_folder)
+file.copy(from = tfw_path, to = path_to_outputFiles_folder)
+file.copy(from = rpc_path, to = path_to_outputFiles_folder)
+dimap_path_in_new_folder=list.files(path=path_to_outputFiles_folder,pattern="DIM",full.names=TRUE)
+tfw_path_in_new_folder=list.files(path=path_to_outputFiles_folder,pattern="TFW",full.names=TRUE)
+rpc_path_in_new_folder=list.files(path=path_to_outputFiles_folder,pattern="RPC",full.names=TRUE)
+
+# Align with raster grid (i.e. negative latitudes)
+mask=sf::st_read(path_to_msCloudMask_file)
+coordinates_mask=as.data.frame(st_coordinates(mask))
+mask_corrected=sf::st_sfc()
+for (i in 1:length(unique(coordinates_mask[,"L2"]))){
+  this_poly<-coordinates_mask %>% filter (L2==i) %>% filter (L1==1)
+  seq_coord_this_poly=NULL
+  for (j in 1:nrow(this_poly)){
+    seq_coord_this_poly=c(seq_coord_this_poly,this_poly[j,"X"],-this_poly[j,"Y"])
+  }
+  mask_corrected=c(mask_corrected,st_sfc(st_polygon(list(matrix(seq_coord_this_poly,ncol=2, byrow=TRUE)))))
+}  
+
+# Convert to raster, reading extent, ncols, nrows and resolution from orthorectified tif
+tif=raster(ms_tif_file)
+r <- raster(as(mask_corrected, "Spatial"), ncols = ncol(tif) , nrows = nrow(tif), ext=extent(tif),res=c(1,1))
+rr <- rasterize(as(mask_corrected, "Spatial"), r, progress = "text")
+rr[!is.na(rr)]=1
+writeRaster(rr,gsub(".TFW",".tif",tfw_path_in_new_folder), format="GTiff",overwrite=TRUE,datatype='INT4U')
+
+# Orthorectify
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",gsub(".TFW",".tif",tfw_path_in_new_folder),"?&skipcarto=true\""," -io.out ",path_to_output_cloudmask_tif," int16 -elev.dem ",path_to_dem_folder)
 system(otb_appli)
 
-# 1.2) Ortorectification de la PAN
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_OrthoRectification")," -io.in \"",path_to_output_pan_mosaic_tif,"?&skipcarto=true\""," -io.out ",path_to_output_pan_ortho_tif," uint16 -elev.dem ",dem_folder)
-system(otb_appli)
+# Pre-process before rasterization
+cld_mask_rast<-raster(path_to_output_cloudmask_tif)
+cld_mask_rast[cld_mask_rast != 1] <- NA
+writeRaster(cld_mask_rast,path_to_output_cloudmask_tif, format="GTiff",overwrite=TRUE,datatype='INT4U')
 
-# 2) Orthorectificaiton de la MS
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_OrthoRectification")," -io.in \"",ms_tif_file,"?&skipcarto=true\""," -io.out ",path_to_output_ms_ortho_tif," uint16 -elev.dem ",dem_folder)
-system(otb_appli)
+# Convert to vector
+gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_cloudmask_tif," ",path_to_output_cloudmask_shp," -b 1 -f \"ESRI Shapefile\" None DN")
+system(gdal_appli)
 
-# 3) Pansharpening
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_Superimpose")," -inr ",path_to_output_pan_ortho_tif," -inm ",path_to_output_ms_ortho_tif," -out ",path_to_output_ms_ortho_superimpose_tif," uint16")
-system(otb_appli)
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_BundleToPerfectSensor")," -inp ",path_to_output_pan_ortho_tif," -inxs ",path_to_output_ms_ortho_superimpose_tif," -out ",path_to_output_pansharpen_tif," uint16")
-system(otb_appli)
+# Remove temporary files
+file.remove(c(tfw_path_in_new_folder,dimap_path_in_new_folder,rpc_path_in_new_folder))
+
+cat("Cloud mask creation OK")
+
+}
+
+
+
+
+
+
+
+
 
 ## Extract ROI to test segmentation
 mode.extent.unit="pxl" #[pxl/phy/lonlat]
@@ -47,7 +162,7 @@ ulx=1000
 uly=1000
 lrx=3000
 lry=3000
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_ExtractROI")," -in ",path_to_output_pansharpen_tif," -mode extent -mode.extent.ulx ",ulx," -mode.extent.uly ",uly," -mode.extent.lrx ",lrx," -mode.extent.lry ",lry," -mode.extent.unit ",mode.extent.unit," -elev.dem ",dem_folder," -out ",path_to_output_pansharpen_ROI_tif," uint16")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_ExtractROI")," -in ",path_to_output_pansharpen_tif," -mode extent -mode.extent.ulx ",ulx," -mode.extent.uly ",uly," -mode.extent.lrx ",lrx," -mode.extent.lry ",lry," -mode.extent.unit ",mode.extent.unit," -elev.dem ",path_to_dem_folder," -out ",path_to_output_pansharpen_ROI_tif," uint16")
 system(otb_appli)
 
 
@@ -61,22 +176,22 @@ system(otb_appli)
 threshold=25       #<paramètre d’échelle> 
 cw=0.7              # <poids radiométrie> 
 sw=0.3              # <poids compacité>
-path_to_output_segmentation=file.path(output_zip_name,paste0(image_name,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".tif"))
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_GenericRegionMerging")," -in ",path_to_output_pansharpen_ROI_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -cw ",cw," -sw ",sw)
+path_to_output_segmentation=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".tif"))
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_GenericRegionMerging")," -in ",path_to_output_pansharpen_ROI_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -cw ",cw," -sw ",sw)
 system(otb_appli)
 
 # Then convert to vector to visualize the results on QGIS and visualy compare them with the segmented image
-path_to_output_segmentation_vector=file.path(output_zip_name,paste0(image_name,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".gpkg"))
+path_to_output_segmentation_vector=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".gpkg"))
 gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_segmentation," ",path_to_output_segmentation_vector," -b 1 None DN")
 system(gdal_appli)
 
 # Segment the whole image when the segmentation paramters are valid and then convert to vector (note that the application used - otbcli_LSGRM - is not available in the official release of OTB. We use a personalized release available here: http://napoli.teledetection.fr/logiciels/otb_moringa_build_win_x64.zip)
 # Segment
-path_to_output_segmentation=file.path(output_zip_name,paste0(image_name,"_segmented_final.tif"))
-otb_appli<-paste0(file.path(otb_applications_path,"otbcli_LSGRM")," -in ",path_to_output_pansharpen_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -criterion.bs.cw ",cw," -criterion.bs.sw ",sw)
+path_to_output_segmentation=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_final.tif"))
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_LSGRM")," -in ",path_to_output_pansharpen_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -criterion.bs.cw ",cw," -criterion.bs.sw ",sw)
 system(gdal_appli)
 # Vectorize
-path_to_output_segmentation_vector=file.path(output_zip_name,paste0(image_name,"_segmented_final.gpkg"))
+path_to_output_segmentation_vector=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_final.gpkg"))
 gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_segmentation," ",path_to_output_segmentation_vector," -b 1 None DN")
 system(gdal_appli)
 
