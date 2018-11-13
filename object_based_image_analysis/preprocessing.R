@@ -126,7 +126,7 @@ file.remove(gsub(".TIF",".geom",path_to_output_ms_ortho_superimpose_tif))
 cat("MS Pansharpening OK")
 }
 
-########### 6) Cut image borders ###########
+########### 5) Cut image borders ###########
 if (cut_image_borders==TRUE){ 
   cat("Cutting image borders...")
   
@@ -203,52 +203,3 @@ file.remove(c(tfw_path_in_new_folder,dimap_path_in_new_folder,rpc_path_in_new_fo
 cat("Cloud mask creation OK")
 
 }
-
-
-
-
-
-
-
-
-
-## Extract ROI to test segmentation
-mode.extent.unit="pxl" #[pxl/phy/lonlat]
-ulx=1000
-uly=1000
-lrx=3000
-lry=3000
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_ExtractROI")," -in ",path_to_output_pansharpen_tif," -mode extent -mode.extent.ulx ",ulx," -mode.extent.uly ",uly," -mode.extent.lrx ",lrx," -mode.extent.lry ",lry," -mode.extent.unit ",mode.extent.unit," -elev.dem ",path_to_dem_folder," -out ",path_to_output_pansharpen_ROI_tif," uint16")
-system(otb_appli)
-
-
-# 4) NOT WORKING Convert to geopackage raster and build pyramids (more compressed than tif = better for visualization in qfield)
-#system(paste0("gdal_translate -ot Byte -of GPKG ",path_to_output_pansharpen_ROI_tif," ",path_to_output_pansharpen_gpkg))
-#system(paste0("gdaladdo --config OGR_SQLITE_SYNCHRONOUS OFF -r AVERAGE ",path_to_output_pansharpen_gpkg," 2 4 8 16 32 64 128 256"))
-
-
-### SEGMENTATION using Baatz and Schape algorithm. Other available algorithms are Euclidian Distance and Full Lambda Schedule
-# First test on the ROI. Then when parameters seem to be ok, apply on all the image (very long process...)
-threshold=25       #<paramètre d’échelle> 
-cw=0.7              # <poids radiométrie> 
-sw=0.3              # <poids compacité>
-path_to_output_segmentation=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".tif"))
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_GenericRegionMerging")," -in ",path_to_output_pansharpen_ROI_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -cw ",cw," -sw ",sw)
-system(otb_appli)
-
-# Then convert to vector to visualize the results on QGIS and visualy compare them with the segmented image
-path_to_output_segmentation_vector=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_",threshold,"_",gsub("..","",cw),"_",gsub("..","",sw),".gpkg"))
-gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_segmentation," ",path_to_output_segmentation_vector," -b 1 None DN")
-system(gdal_appli)
-
-# Segment the whole image when the segmentation paramters are valid and then convert to vector (note that the application used - otbcli_LSGRM - is not available in the official release of OTB. We use a personalized release available here: http://napoli.teledetection.fr/logiciels/otb_moringa_build_win_x64.zip)
-# Segment
-path_to_output_segmentation=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_final.tif"))
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_LSGRM")," -in ",path_to_output_pansharpen_tif," -out ",path_to_output_segmentation," int32 -threshold ",threshold," -criterion.bs.cw ",cw," -criterion.bs.sw ",sw)
-system(gdal_appli)
-# Vectorize
-path_to_output_segmentation_vector=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_segmented_final.gpkg"))
-gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_segmentation," ",path_to_output_segmentation_vector," -b 1 None DN")
-system(gdal_appli)
-
-
