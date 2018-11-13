@@ -10,7 +10,7 @@
 
 
 # Local variable (to set by the user)
-kml_path="/home/ptaconet/REACT_BF.kml"
+kml_path="/home/ptaconet/Téléchargements/koumbia_2.kml"
 apiKey = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="")
 imagerySet="Aerial"
 destFolder="/home/ptaconet/react/r_bingmaps"
@@ -59,11 +59,13 @@ kml_sf <- st_transform(kml_sf,crs=epsg_utm)
 grid_10km=st_make_grid(kml_sf,what="polygons",cellsize = cell_size)
 
 # We convert the grid to geopackage and we save it
-st_write(st_transform(grid_10km,crs=4326),paste0(destFolder,"/BF_grid_10km.gpkg"))
+st_write(st_transform(grid_10km,crs=4326),paste0(destFolder,"/koumbia_grid_10km.gpkg"))
 
 # Loop on each 10km square tile
 for (i in 1:length(grid_10km)){
 
+  
+  for (i in 1:2){
 cat(paste0("Creating 10 square kilometers grid n° ",i, " over ",length(grid_10km)))
   
 # We can download 1500 * 1500 pixels image from bing maps servers. We know that at zoom 19, 1 pixel=0.30m, so 1500 px = 450m. So within each 10km grid we make 400m grids (to be sure that all the area is encompassed)
@@ -75,6 +77,7 @@ dir.create(file.path(destFolder, i))
 # Download all the tiles from bing maps servers and convert them as tif
 for (j in 1:length(grid_400m)){
   cat(paste0("downloading the data n° ",j, " over ",length(grid_400m)))
+  fileName=paste0(i,"_10km_",j)
   map_this_tile<-download_and_georeference_bingmaps_data(apiKey=apiKey,
                                                     center_x=st_coordinates(grid_400m[j])[1,1],
                                                     center_y=st_coordinates(grid_400m[j])[1,2],
@@ -91,10 +94,10 @@ for (j in 1:length(grid_400m)){
 
 # make a big tif out of all the small tifs
 cat("Creating the 10km x 10km tif")
-all_my_rasts <- list.files(path=destFolder, pattern =paste0(i,"_10km"), full.names=TRUE)
+all_my_rasts <- list.files(path=file.path(destFolder,i), pattern =paste0(i,"_10km"), full.names=TRUE)
 all_my_rasts=as.vector(all_my_rasts)
 
-mosaic_tif_images(all_my_rasts,paste0(folder,"/",i,".tif"))
+mosaic_tif_images(all_my_rasts,paste0(destFolder,"/",i,"_10km.tif"))
 
 ## Convert the tif created to a raster in a OGC Geopackage and build pyramids at various zoom levels .
 cat("Converting the tif to a geopackage file")

@@ -1,11 +1,13 @@
 ######################################################################
 ##### 52North WPS annotations ##########
 ######################################################################
-# wps.des: id = eo_images_preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries: the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/). The user should be aware that Some operations might work only on Linux OS.
+# wps.des: id = eo_images_preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/). The user should be aware that some operations might work only on Linux OS.
 # wps.in: id = pan_tile_fusionning, type = boolean, title = Panchromatic images (PAN) are split into many tiles. Fusion tiles into 1 single TIF file? , value="TRUE|FALSE" ;
+# wps.in: id = toa_reflectance_conversion, type = boolean, title = Convert MS and PAN to Top-of-atmosphere reflectance? , value="TRUE|FALSE" ;
 # wps.in: id = pan_orthorectification, type = boolean, title = Orthorectify the panchromatic tiled image? , value="TRUE|FALSE" ;
 # wps.in: id = ms_orthorectification, type = boolean, title = Orthorectify the multispectral image? , value="TRUE|FALSE" ;
 # wps.in: id = ms_pansharpening, type = boolean, title = Pansharpen MS image ? , value="TRUE|FALSE"; 
+# wps.in: id = cut_image_borders, type = boolean, title = Cut image borders (10 pixels at each side) to avoid having white or black pixels at the border of the image ? , value="TRUE|FALSE"; 
 # wps.in: id = cloud_mask_generation, type = boolean, title = Some masks are included in the products delivered however they are not geo-refererenced. Generate a geo-referenced cloud mask ? , value="TRUE|FALSE"; 
 # wps.in: id = path_to_panImages_folder, type = string, title = Path to the folder where the PAN .TIF images are stored, value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A";
 # wps.in: id = path_to_msImage_folder, type = string, title = Path to the MS .TIF file, value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A/IMG_SPOT7_MS_201710111019265_SEN_SPOT7_20171012_1350131l9pjds0m4wzt_1_R1C1.TIF";
@@ -21,18 +23,20 @@
 
 ### Variables to be set by the user
 # Workflow parameterization
-pan_tile_fusionning<-TRUE
+pan_tile_fusionning<-FALSE
+toa_reflectance_conversion<-TRUE
 pan_orthorectification<-TRUE
 ms_orthorectification<-TRUE
 ms_pansharpening<-TRUE
+cut_image_borders<-FALSE
 cloud_mask_generation<-TRUE
 
 # Paths to input data folders / files
-path_to_panImages_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_P_001_A"
-path_to_msImage_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A"
-path_to_msCloudMask_file="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_108/PROD_SPOT7_001/VOL_SPOT7_001_A/IMG_SPOT7_MS_001_A/MASKS/CLD_SPOT7_MS_201710111019265_SEN_SPOT7_20171012_1350131l9pjds0m4wzt_1_MSK.GML"
-path_to_outputFiles_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_108"
-outputImageName="SPOT7_108_20171012_BF"
+path_to_panImages_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_113/SPOT6_2017_HC_BRUT_NC_GEOSUD_PAN_113/PROD_SPOT6_001/VOL_SPOT6_001_A/IMG_SPOT6_P_001_A"
+path_to_msImage_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_113/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_113/PROD_SPOT6_001/VOL_SPOT6_001_A/IMG_SPOT6_MS_001_A"
+path_to_msCloudMask_file="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_113/SPOT6_2017_HC_BRUT_NC_GEOSUD_MS_113/PROD_SPOT6_001/VOL_SPOT6_001_A/IMG_SPOT6_MS_001_A/MASKS/CLD_SPOT6_MS_201710171025039_SEN_SPOT6_20171018_1304181fuxjrlyazjr4_1_MSK.GML"
+path_to_outputFiles_folder="/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_113"
+outputImageName="SPOT6_113_20171018_CIV"
 path_to_dem_folder="/home/ptaconet/react/SRTM_dem"
 path_to_otbApplications_folder<-"/home/ptaconet/OTB-6.6.0-Linux64/bin"
 
@@ -46,11 +50,14 @@ dir.create(path_to_outputFiles_folder)
 
 # Get or set useful paths
 path_to_output_pan_mosaic_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PAN_mosaic.TIF")) # Path to the output mosaic PAN tif
+path_to_output_pan_toa_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PAN_TOAx10000.TIF")) # Path to the output PAN TOAtif
+path_to_output_ms_toa_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_TOAx10000.TIF")) # Path to the output MS TOA tif
 path_to_output_pan_ortho_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PAN_ortho.TIF")) # Path to the output mosaic PAN tif orthorectified 
 path_to_output_ms_ortho_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_ortho.TIF")) # Path to the output MS tif orthorectified 
 path_to_output_pansharpen_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PANSHARPEN_ortho.TIF")) # Path to the output pansharpened tif orthorectified
-path_to_output_cloudmask_tif<-file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.TIF")) # Path to the output cloud mask tif orthorectified
-path_to_output_cloudmask_shp<-file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.shp")) # Path to the output cloud mask shapefile orthorectified
+path_to_output_pansharpen_tif_cut=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_PANSHARPEN_ortho_cut.TIF")) # Path to the output pansharpened tif orthorectified cut at the borders
+path_to_output_cloudmask_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.TIF")) # Path to the output cloud mask tif orthorectified
+path_to_output_cloudmask_shp=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_CLDMASK_ortho.shp")) # Path to the output cloud mask shapefile orthorectified
 
 pan_tifs_paths=as.vector(list.files(path=path_to_panImages_folder,pattern=".TIF",full.names=TRUE)) 
 ms_tif_path=as.vector(list.files(path=path_to_msImage_folder,pattern=".TIF",full.names=TRUE))
@@ -59,7 +66,7 @@ ms_tif_outputImageName=as.vector(list.files(path=path_to_msImage_folder,pattern=
 
 ### Start workflow
 
-######## 1.1) PAN tile fusionning ###########
+######## 1) PAN tile fusionning ###########
 if (pan_tile_fusionning==TRUE){
 cat("Starting PAN tile fusionning ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(pan_tifs_paths, collapse = ' ')," -out ",path_to_output_pan_mosaic_tif," uint16")
@@ -67,7 +74,30 @@ system(otb_appli)
 cat("PAN tile fusionning OK")
 }
 
-######## 1.2) PAN orthorectification ###########
+
+######## 2) Convertion to TOA reflectance ########
+if (toa_reflectance_conversion==TRUE){
+cat("Starting Convertion to TOA reflectance ...")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OpticalCalibration")," -in ",path_to_output_pan_mosaic_tif," -out ",gsub(".TIF","_temp.TIF",path_to_output_pan_toa_tif)," float")
+system(otb_appli)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_BandMathX")," -il ",gsub(".TIF","_temp.TIF",path_to_output_pan_toa_tif)," -exp \"10000*im1\" -out ",path_to_output_pan_toa_tif," uint16")
+system(otb_appli)
+file.remove(gsub(".TIF","_temp.TIF",path_to_output_pan_toa_tif))
+
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OpticalCalibration")," -in ",ms_tif_path," -out ",gsub(".TIF","_temp.TIF",path_to_output_ms_toa_tif)," float")
+system(otb_appli)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_BandMathX")," -il ",gsub(".TIF","_temp.TIF",path_to_output_ms_toa_tif)," -exp \"10000*im1\" -out ",path_to_output_ms_toa_tif," uint16")
+system(otb_appli)
+file.remove(gsub(".TIF","_temp.TIF",path_to_output_ms_toa_tif))
+
+ms_tif_path = path_to_output_ms_toa_tif
+path_to_output_pan_mosaic_tif = path_to_output_pan_toa_tif
+
+cat("Convertion to TOA reflectance OK")
+}
+
+
+######## 2) PAN orthorectification ###########
 if (pan_orthorectification==TRUE){
 cat("Starting PAN orthorectification ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",path_to_output_pan_mosaic_tif,"?&skipcarto=true\""," -io.out ",path_to_output_pan_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
@@ -75,15 +105,15 @@ system(otb_appli)
 cat("PAN orthorectification OK")
 }
 
-########### 2) MS orthorectification ###########
+########### 3) MS orthorectification ###########
 if (ms_orthorectification==TRUE){
 cat("Starting MS orthorectification ...")
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",path_ms_tif_with_cldmask,"?&skipcarto=true\""," -io.out ",path_to_output_ms_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",ms_tif_path,"?&skipcarto=true\""," -io.out ",path_to_output_ms_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
 system(otb_appli)
 cat("MS orthorectification OK")
 }
 
-########### 3) MS Pansharpening ###########
+########### 4) MS Pansharpening ###########
 if (ms_pansharpening==TRUE){
 cat("Starting MS Pansharpening ...")
 path_to_output_ms_ortho_superimpose_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_L1_superimpose.TIF"))
@@ -92,10 +122,35 @@ system(otb_appli)
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_BundleToPerfectSensor")," -inp ",path_to_output_pan_ortho_tif," -inxs ",path_to_output_ms_ortho_superimpose_tif," -out ",path_to_output_pansharpen_tif," uint16")
 system(otb_appli)
 file.remove(path_to_output_ms_ortho_superimpose_tif)
+file.remove(gsub(".TIF",".geom",path_to_output_ms_ortho_superimpose_tif))
 cat("MS Pansharpening OK")
 }
 
-########### 4) Cloud mask creation (both in raster and vector formats) ###########
+########### 6) Cut image borders ###########
+if (cut_image_borders==TRUE){ 
+  cat("Cutting image borders...")
+  
+  # Get image size
+  r<-raster(path_to_output_pansharpen_tif)
+  # Set number of pixels to cut at the borders 
+  ulx=200
+  uly=200
+  lrx=r@ncols-200
+  lry=r@nrows-200
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_ExtractROI")," -in ",path_to_output_pansharpen_tif," -out ",path_to_output_pansharpen_tif_cut," uint16 -mode extent -mode.extent.unit pxl -mode.extent.ulx ",ulx," -mode.extent.uly ",uly," -mode.extent.lrx ",lrx," -mode.extent.lry ",lry)
+  system(otb_appli)
+
+  # rename files
+  file.remove(path_to_output_pansharpen_tif)
+  file.remove(gsub(".TIF",".geom",path_to_output_pansharpen_tif))
+  file.rename(path_to_output_pansharpen_tif_cut,path_to_output_pansharpen_tif)
+  file.rename(gsub(".TIF",".geom",path_to_output_pansharpen_tif_cut),gsub(".TIF",".geom",path_to_output_pansharpen_tif))
+  
+  cat("Cutting image borders OK")
+  
+}
+
+########### 6) Cloud mask creation (both in raster and vector formats) ###########
 if (cloud_mask_generation==TRUE){ 
 cat("Starting cloud mask creation ...")
 dimap_path=list.files(path=path_to_msImage_folder,pattern="DIM",full.names=TRUE)
@@ -121,8 +176,8 @@ for (i in 1:length(unique(coordinates_mask[,"L2"]))){
   mask_corrected=c(mask_corrected,st_sfc(st_polygon(list(matrix(seq_coord_this_poly,ncol=2, byrow=TRUE)))))
 }  
 
-# Convert to raster, reading extent, ncols, nrows and resolution from orthorectified tif
-tif=raster(ms_tif_file)
+# Convert to raster, reading extent, ncols, nrows and resolution from tif
+tif=raster(ms_tif_path)
 r <- raster(as(mask_corrected, "Spatial"), ncols = ncol(tif) , nrows = nrow(tif), ext=extent(tif),res=c(1,1))
 rr <- rasterize(as(mask_corrected, "Spatial"), r, progress = "text")
 rr[!is.na(rr)]=1
@@ -136,6 +191,7 @@ system(otb_appli)
 cld_mask_rast<-raster(path_to_output_cloudmask_tif)
 cld_mask_rast[cld_mask_rast != 1] <- NA
 writeRaster(cld_mask_rast,path_to_output_cloudmask_tif, format="GTiff",overwrite=TRUE,datatype='INT4U')
+file.rename(gsub(".TIF",".tif",path_to_output_cloudmask_tif),path_to_output_cloudmask_tif)
 
 # Convert to vector
 gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_cloudmask_tif," ",path_to_output_cloudmask_shp," -b 1 -f \"ESRI Shapefile\" None DN")
