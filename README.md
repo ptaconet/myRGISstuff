@@ -1,4 +1,6 @@
-# R scripts developed in the frame of the REACT project   (« Gestion de la résistance aux insecticides au Burkina Faso et en Côte d’Ivoire : Recherche sur les stratégies de lutte anti-vectorielle »)
+# R scripts developed in the frame of the REACT project   
+
+« Gestion de la résistance aux insecticides au Burkina Faso et en Côte d’Ivoire : Recherche sur les stratégies de lutte anti-vectorielle »
 
 Description of the scripts :
 
