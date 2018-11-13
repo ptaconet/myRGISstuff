@@ -40,6 +40,9 @@ outputImageName="SPOT6_113_20171018_CIV"
 path_to_dem_folder="/home/ptaconet/react/SRTM_dem"
 path_to_otbApplications_folder<-"/home/ptaconet/OTB-6.6.0-Linux64/bin"
 
+
+## Start of the workflow
+
 ## Call useful packages
 library(sf)
 library(raster)
