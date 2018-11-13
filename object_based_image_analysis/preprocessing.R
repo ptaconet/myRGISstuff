@@ -1,7 +1,7 @@
 ######################################################################
 ##### 52North WPS annotations ##########
 ######################################################################
-# wps.des: id = eo_images_preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/). The user should be aware that some operations might work only on Linux OS.
+# wps.des: id = preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/).
 # wps.in: id = pan_tile_fusionning, type = boolean, title = Panchromatic images (PAN) are split into many tiles. Fusion tiles into 1 single TIF file? , value="TRUE|FALSE" ;
 # wps.in: id = toa_reflectance_conversion, type = boolean, title = Convert MS and PAN to Top-of-atmosphere reflectance? , value="TRUE|FALSE" ;
 # wps.in: id = pan_orthorectification, type = boolean, title = Orthorectify the panchromatic tiled image? , value="TRUE|FALSE" ;
@@ -19,7 +19,7 @@
 # wps.out: id = output_zip, type = text/zip, title = ZIP file containing the following datasets : PAN_mosaic.tif : PAN mosaiced tif file / PAN_ortho.tif : PAN orthorectified tif file / MS_ortho.tif : MS orthorectified tif file / PANSHARPEN_ortho.TIF : MS pansherpened orthorectified tif file / CLDMASK_ortho.TIF : cloud mask georeferenced tif file / CLDMASK_ortho.shp : cloud mask georeferenced shapefile
 
 #### Additional informations on how Spot 6/7 images are delivered can be found on the SPOT 6/7 user guide available here: https://www.spaceoffice.nl/blobs/Dataportaal/User_Guide_SPOT6_V1.0.pdf ;
-
+#### Some operations might work only on Linux OS
 
 ### Variables to be set by the user
 # Workflow parameterization

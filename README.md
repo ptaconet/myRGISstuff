@@ -5,7 +5,7 @@
 Description of the scripts :
 
 ## *object_based_image_analysis* : scripts for the processing of the satellite imagery (Spot 6/7) used for the generation of the land cover maps
- - *preprocessing* : This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/). The user should be aware that some operations might work only on Linux OS.
+ - *preprocessing* : This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/).
  
  - *preprocessing_mosaicing* : This script performs a simple mosaicing of orthorectified TIF images using the Orfeo Toolbox otbcli_Mosaic application.
  
