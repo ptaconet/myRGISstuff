@@ -118,7 +118,7 @@ system(otb_appli)
 cat("MS orthorectification OK")
 }
 
-########### 5) ROI Extraction ###########
+########### 4) ROI Extraction ###########
 if (extract_roi==TRUE){ 
   cat("Extracting the ROI for the MS image...")
   
@@ -146,7 +146,7 @@ if (extract_roi==TRUE){
   
 }
 
-########### 4) MS Pansharpening ###########
+########### 5) MS Pansharpening ###########
 if (ms_pansharpening==TRUE){
 cat("Starting MS Pansharpening ...")
 path_to_output_ms_ortho_superimpose_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_L1_superimpose.TIF"))
