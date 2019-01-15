@@ -1,7 +1,7 @@
 ######################################################################
 ##### 52North WPS annotations ##########
 ######################################################################
-# wps.des: id = preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/).
+# wps.des: id = preprocessing, title = Pre-processing of SPOT 6/7 images (tile fusionning + orthorectification + pansharpening + ROI extraction + cloud mask extraction), abstract = This script is a workflow for the pre-processing SPOT6/7 satellite imagery data (tile fusionning + orthorectification + pansharpening + ROI extraction + cloud mask extraction). The user can parameterize the operations he/she wants to be computed. The script uses applications coming from various libraries that must be installed : the Orfeo Toolbox (https://www.orfeo-toolbox.org/), R spatial packages ("sf" for vector and "raster" for raster) and the Geospatial Data Abstraction Library (https://www.gdal.org/).
 # wps.in: id = pan_tile_fusionning, type = boolean, title = Panchromatic images (PAN) are split into many tiles. Fusion tiles into 1 single TIF file? , value="TRUE|FALSE" ;
 # wps.in: id = toa_reflectance_conversion, type = boolean, title = Convert MS and PAN to Top-of-atmosphere reflectance? , value="TRUE|FALSE" ;
 # wps.in: id = pan_orthorectification, type = boolean, title = Orthorectify the panchromatic tiled image? , value="TRUE|FALSE" ;
@@ -15,8 +15,7 @@
 # wps.in: id = path_to_outputFiles_folder, type = string, title = Path to the folder where the new data will be stored. The folder will be created if not already existing in the system. , value = "/home/ptaconet/react/MD_SPOT6_2017_HC_BRUT_GEOSUD_108";
 # wps.in: id = outputImageName, type = string, title = Prefix use for the output files (i.e. files that will be generated in the workflow) , value = "SEN_SPOT7_20171012";
 # wps.in: id = path_to_roi_polygon, type = string, title = Path to the ROI in kml or shp format, value = "/home/ptaconet/Documents/react/REACT_BF.kml";
-# wps.in: id = path_to_path_to_dem_folder, type = string, title = Path to the folder containing the SRTM Digital Elevation Model files (the DEM is used for orthorectification). The DEM should be available in .hgt format. SRTM DEM can be easily downloaded here: http://dwtkns.com/srtm30m/, value = "/home/ptaconet/react/SRTM_dem";
-
+# wps.in: id = path_to_dem_folder, type = string, title = Path to the folder containing the SRTM Digital Elevation Model files (the DEM is used for orthorectification). The DEM should be available in .hgt format. SRTM DEM can be easily downloaded here: http://dwtkns.com/srtm30m/, value = "/home/ptaconet/react/SRTM_dem";
 # wps.in: id = path_to_otbApplications_folder, type = string, title = Path to the folder containing the OTB applications. , value = "/home/ptaconet/OTB-6.6.0-Linux64/bin";
 # wps.out: id = output_zip, type = text/zip, title = ZIP file containing the following datasets : PAN_mosaic.tif : PAN mosaiced tif file / PAN_ortho.tif : PAN orthorectified tif file / MS_ortho.tif : MS orthorectified tif file / PANSHARPEN_ortho.TIF : MS pansherpened orthorectified tif file / CLDMASK_ortho.TIF : cloud mask georeferenced tif file / CLDMASK_ortho.shp : cloud mask georeferenced shapefile
 
@@ -72,7 +71,7 @@ ms_tif_outputImageName=as.vector(list.files(path=path_to_msImage_folder,pattern=
 
 ### Start workflow
 
-######## 1) PAN tile fusionning ###########
+######## 1.1 - Mosaic tiles of panchromatic image ###########
 if (pan_tile_fusionning==TRUE){
 cat("Starting PAN tile fusionning ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(pan_tifs_paths, collapse = ' ')," -out ",path_to_output_pan_mosaic_tif," uint16")
@@ -80,7 +79,7 @@ system(otb_appli)
 cat("PAN tile fusionning OK")
 }
 
-######## 2) Convertion to TOA reflectance ########
+######## 1.2 - Convert values of panchromatic and multispectral images to top-of-atmosphere reflectance  ########
 if (toa_reflectance_conversion==TRUE){
 cat("Starting Convertion to TOA reflectance ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OpticalCalibration")," -in ",path_to_output_pan_mosaic_tif," -out ",gsub(".TIF","_temp.TIF",path_to_output_pan_toa_tif)," float")
@@ -102,7 +101,7 @@ cat("Convertion to TOA reflectance OK")
 }
 
 
-######## 2) PAN orthorectification ###########
+######## 1.3 - Orthorectify panchromatic and multispectral images ###########
 if (pan_orthorectification==TRUE){
 cat("Starting PAN orthorectification ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",path_to_output_pan_mosaic_tif,"?&skipcarto=true\""," -io.out ",path_to_output_pan_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
@@ -110,7 +109,6 @@ system(otb_appli)
 cat("PAN orthorectification OK")
 }
 
-########### 3) MS orthorectification ###########
 if (ms_orthorectification==TRUE){
 cat("Starting MS orthorectification ...")
 otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_OrthoRectification")," -io.in \"",ms_tif_path,"?&skipcarto=true\""," -io.out ",path_to_output_ms_ortho_tif," uint16 -elev.dem ",path_to_dem_folder)
@@ -118,7 +116,8 @@ system(otb_appli)
 cat("MS orthorectification OK")
 }
 
-########### 4) ROI Extraction ###########
+
+########### 1.4 - Cut panchromatic and multispectral images following the ROI  ###########
 if (extract_roi==TRUE){ 
   cat("Extracting the ROI for the MS image...")
   
@@ -146,7 +145,8 @@ if (extract_roi==TRUE){
   
 }
 
-########### 5) MS Pansharpening ###########
+
+########### 1.5 - Pansharpening ###########
 if (ms_pansharpening==TRUE){
 cat("Starting MS Pansharpening ...")
 path_to_output_ms_ortho_superimpose_tif=file.path(path_to_outputFiles_folder,paste0(outputImageName,"_MS_L1_superimpose.TIF"))
@@ -159,7 +159,7 @@ file.remove(gsub(".TIF",".geom",path_to_output_ms_ortho_superimpose_tif))
 cat("MS Pansharpening OK")
 }
 
-########### 6) Cloud mask creation (both in raster and vector formats) ###########
+########### 1.6 - Create cloud mask  ###########
 if (cloud_mask_generation==TRUE){ 
 cat("Starting cloud mask creation ...")
 dimap_path=list.files(path=path_to_msImage_folder,pattern="DIM",full.names=TRUE)
