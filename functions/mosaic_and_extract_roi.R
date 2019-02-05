@@ -1,4 +1,4 @@
-mosaic_and_extract_roi<-function(input_path_files,output_path_folder,output_path_file,roi_vector_path,otbapplications_folder_path,dem_folder_path){
+mosaic_and_extract_roi<-function(input_path_files,output_path_file,roi_vector_path,otbapplications_folder_path,dem_folder_path){
   
   cat("Mosaicing the tiles...")
   output_path_temp_file=gsub("\\.","_temporary.",output_path_file)
