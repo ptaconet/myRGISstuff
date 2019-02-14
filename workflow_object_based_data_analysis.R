@@ -31,13 +31,17 @@
   ## 5.4 - extract radiometric indices from the S2 image : 
   ## 5.5 - Split the bands of the Spot6/7 image
 ### Step 6 - Segment the Spot6/7 image 
-### Step 7 - Extract zonal, shape and contextual statistics for each band / indice for the ground truth dataset
-### Step 8 - Train the classifier : generate the model using random forest
+### Step 7 - Extract zonal statistics (radiometric, textural, ancillary, shape, contextual)
+  ## 7.1 - Extract zonal statistics for the ground truth dataset
+  ## 7.2 - Extract zonal statistics for the segmented objects dataset
+### Step 8 - Train the classifier : generate the classification model using random forest
   ## 8.1 - Parameterize the model: features to keep, optimum number of trees, optimum number of variables to test at each division
-  ## 8.2 - Extract zonal, shape and contextual statistics for each band / indice for the segmented objects dataset
-### Step 9 - Classify and post-process 
+### Step 9 - Classify
   ## 9.1 Classify the segmented objects using the model prepared at step 9
   ## 9.2 Rasterize the output
+### Step 10 - Post - process
+  ## 10.1 Get clean raster dataset
+  ## 10.2 Get clear vector dataset
 
 ########################################################################################################################
 ############ Set Input parameters for the workflow ############
@@ -55,7 +59,7 @@ copernicus_scihub_username="ptaconet" #<Copenicus scihub username>
 copernicus_scihub_password="****"  #<Copenicus scihub password>
 Sentinel2_products_id<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de") #<Ids of the products to download in the Copernicus Scihub>
 # BF: Sentinel2_products_id<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de")
-# CIV: Sentinel2_products_id<-c("")
+# CIV: Sentinel2_products_id<-c("6236fb46-41c1-4950-b6c8-602c48b90049")
 
 ### Parameters for step 4
 proj_srs="+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs" #<proj srs for the ROI>
@@ -81,7 +85,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 # CIV: segmentation_sw<-0.8
 
 ### Parameters for step 7
-path_to_groundtruth_folder<-"Ground_truth" 
+path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
 path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"ground_truth_v_obj_segmentation_v2.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
 methods_to_compute<-"average,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
@@ -181,8 +185,6 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
 ### Parameters for step 8
 column_names_lc_classes<-c("type_1","type_2","type_3") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most detailed land cover, type_2 is a more aggregated classification, etc.>
 column_name_lc_classification<-"type_1" #<Name of the column of land cover class in the ground truth dataset. Column type must be character string>
-final_lc_classes_labels<-c()
-final_lc_classes_classes<-c()  
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -269,8 +271,6 @@ orthorectify_spot67<-function(input_path,output_path,otbapplications_folder_path
   }
 }
 
-## Function to extract zonal statistics
-
 
 ### Call useful packages
 require(raster)
@@ -288,35 +288,35 @@ require(caret)
 setwd(path_to_processing_folder)
 
 ## Set paths of output folders / files
-path_to_spot67_raw_folder<-"VHR_SPOT6/raw_data" # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
+path_to_spot67_raw_folder<-file.path(path_to_processing_folder,"VHR_SPOT6/raw_data") # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
 # Step 1
-path_to_dem_raw_folder="DEM_SRTM/raw_data" # Path to the folder where the DEM raw data will be stored
+path_to_dem_raw_folder=file.path(path_to_processing_folder,"DEM_SRTM/raw_data") # Path to the folder where the DEM raw data will be stored
 # Step 2
 path_to_spot67_preprocessed_folder=gsub("raw","processed",path_to_spot67_raw_folder) # Path to the folder where the datasets extracted from the Spot6/7 will be stored
 path_to_spot67_preprocessed_ms=file.path(path_to_spot67_preprocessed_folder,"MS.TIF") # Path to the output pre-processed Spot6/7 multispectral image
 path_to_spot67_preprocessed_pan=file.path(path_to_spot67_preprocessed_folder,"PAN.TIF") # Path to the output pre-processed Spot6/7 panchromatic image
 path_to_spot67_preprocessed_pansharpen=file.path(path_to_spot67_preprocessed_folder,"PANSHARPEN.TIF") # Path to the output pre-processed Spot6/7 pansharpened image
 # Step 3
-path_to_sentinel2_raw_folder<-"HR_Sentinel2/raw_data" # Path to the folder where the Sentinel 2 raw data will be stored
+path_to_sentinel2_raw_folder<-file.path(path_to_processing_folder,"HR_Sentinel2/raw_data") # Path to the folder where the Sentinel 2 raw data will be stored
 # Step 4
-path_to_dem_preprocessed_folder="DEM_SRTM/processed_data" # Path to the folder where the DEM processed data and related data (slope, accumulation, etc.) will be stored
-path_to_sentinel2_preprocessed_folder<-"HR_Sentinel2/processed_data" # Path to the folder where the Sentinel 2 processed data will be stored
-dem_output_path_file<-file.path(path_to_processing_folder,path_to_dem_preprocessed_folder,"DEM.tif") # output DEM file path
+path_to_dem_preprocessed_folder=file.path(path_to_processing_folder,"DEM_SRTM/processed_data") # Path to the folder where the DEM processed data and related data (slope, accumulation, etc.) will be stored
+path_to_sentinel2_preprocessed_folder<-file.path(path_to_processing_folder,"HR_Sentinel2/processed_data") # Path to the folder where the Sentinel 2 processed data will be stored
+dem_output_path_file<-file.path(path_to_dem_preprocessed_folder,"DEM.tif") # output DEM file path
 # Step 5
-path_to_simple_textural_indices<-file.path(path_to_processing_folder,path_to_spot67_preprocessed_folder,"HaralickTextures_simple.TIF") # Path to textural indice
-path_to_advanced_textural_indices<-file.path(path_to_processing_folder,path_to_spot67_preprocessed_folder,"HaralickTextures_advanced.TIF")
+path_to_simple_textural_indices<-file.path(path_to_spot67_preprocessed_folder,"HaralickTextures_simple.TIF") # Path to textural indice
+path_to_advanced_textural_indices<-file.path(path_to_spot67_preprocessed_folder,"HaralickTextures_advanced.TIF")
 path_to_output_accumulation_threshold<-file.path(path_to_dem_preprocessed_folder,"accumulation_treshold_vector.gpkg")
 # Step 6
-path_to_segmentation_folder<-"Segmentation" # Path to the folder where the outputs of the segmentation process will be stored
+path_to_segmentation_folder<-file.path(path_to_processing_folder,"Segmentation") # Path to the folder where the outputs of the segmentation process will be stored
 path_to_segmented_dataset<-file.path(path_to_segmentation_folder,"segmentation_vector.gpkg")
 # Step 7
 path_to_ground_truth_stats<-file.path(path_to_groundtruth_folder,"ground_truth_stats.gpkg") # Path to the ground truth datasets with zonal statistics
-path_to_zonalstatistics_folder<-"Zonal_statistics" # Path to the folder where the output of the zonal statistics process will be stored
+path_to_zonalstatistics_folder<-file.path(path_to_processing_folder,"Zonal_statistics") # Path to the folder where the output of the zonal statistics process will be stored
 # Step 8
 path_to_segmented_dataset_stats<-file.path(path_to_segmentation_folder,"segmented_dataset_stats.gpkg") # Path to the object segmented datasets with zonal statistics
 
 # Step 9
-path_to_classification_folder<-"Classification" # Path to the fodler of output of the classification (including model)
+path_to_classification_folder<-file.path(path_to_processing_folder,"Classification") # Path to the fodler of output of the classification (including model)
 path_to_output_classification_vector<-file.path(path_to_classification_folder,"classification_vector.gpkg")
 # Step 10
 path_to_output_classification_raster<-file.path(path_to_classification_folder,"classification_raster.tif")
@@ -337,7 +337,9 @@ saga_work_env <- RSAGA::rsaga.env()
 ########################################################################################################################
 
 ########################################################################################################################
+########################################################################################################################
 ############ Step 1 - Downloading the SRTM tiles  ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses otb applications: DownloadSRTMTiles
 
@@ -345,9 +347,10 @@ cat("Downloading the DEM SRTM tiles corresponding to the ROI...")
 system(paste0(file.path(path_to_otbApplications_folder,"otbcli_DownloadSRTMTiles")," -vl ",file.path(path_to_processing_folder,path_to_roi_vector)," -mode download -tiledir ",file.path(path_to_processing_folder,path_to_dem_raw_folder)))
 cat("OK")
 
-
+########################################################################################################################
 ########################################################################################################################
 ############ Step 2 - Pre-processing the Spot6/7 products ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses otb applications: OpticalCalibration, BandMathX, ExtractROI, Mosaic, OrthoRectification, Superimpose, BundleToPerfectSensor
 
@@ -482,8 +485,11 @@ if(length(products_to_preprocess)>1){
 
 cat("Pre-processing the Spot6/7 products OK")
 
+
+########################################################################################################################
 ########################################################################################################################
 ############ Step 3 - Downloading ancillary data ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses Copernicus Scihub API
 
@@ -496,12 +502,15 @@ cat("Downloading the ancillary data: Sentinel 2 product(s) ...")
 for (i in 1:length(Sentinel2_products_id)){
   # from: https://scihub.copernicus.eu/userguide/BatchScripting
   # wget --content-disposition --continue --user={USERNAME} --password={PASSWORD}"https://scihub.copernicus.eu/dhus/odata/v1/Products('22e7af63-07ad-4076-8541-f6655388dc5e')/\$value"
-  system(paste0("wget --content-disposition --continue --user=",copernicus_scihub_username," --password=",copernicus_scihub_password," --directory-prefix ",file.path(path_to_processing_folder,path_to_sentinel2_raw_folder)," \"https://scihub.copernicus.eu/dhus/odata/v1/Products('",Sentinel2_products_id[i],"')/\\$value\\"))
+  system(paste0("wget --content-disposition --continue --user=",copernicus_scihub_username," --password=",copernicus_scihub_password," --directory-prefix ",path_to_sentinel2_raw_folder," \"https://scihub.copernicus.eu/dhus/odata/v1/Products('",Sentinel2_products_id[i],"')/\\$value\\"))
   }
 cat("Downloading the ancillary data: Sentinel 2 product(s) OK")
 
+
+########################################################################################################################
 ########################################################################################################################
 ############ Step 4 - Preprocessing the ancillary data ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses otb applications: Mosaic, ExtractROI
 
@@ -512,13 +521,13 @@ cat("Downloading the ancillary data: Sentinel 2 product(s) OK")
 cat("Pre-processing the DEM : if relevant, mosaicing the various tiles and extracting the ROI ...")
 
 # List the products
-products_to_preprocess<-list.files(file.path(path_to_processing_folder,path_to_dem_raw_folder),full.names = T)
+products_to_preprocess<-list.files(path_to_dem_raw_folder,full.names = T)
 # Unzip the files
 for (i in 1:length(products_to_preprocess)){
-unzip(products_to_preprocess[i],exdir = file.path(path_to_processing_folder,path_to_dem_raw_folder))
+unzip(products_to_preprocess[i],exdir = path_to_dem_raw_folder)
 }
 file.remove(products_to_preprocess)
-products_to_preprocess<-list.files(file.path(path_to_processing_folder,path_to_dem_raw_folder),full.names = T)
+products_to_preprocess<-list.files(path_to_dem_raw_folder,full.names = T)
 # If there are multiple tiles, mosaic them and then extract the ROI, else only extract the ROI
 if(length(products_to_preprocess)>1){
   res<-mosaic_and_extract_roi(products_to_preprocess,dem_output_path_file,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
@@ -527,7 +536,7 @@ if(length(products_to_preprocess)>1){
   }
 cat(res)
 
-# Convert to correct EPSG
+# Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
 system(paste0("gdalwarp -t_srs '",proj_srs,"' -overwrite ",dem_output_path_file," ",gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file)))
 
 file.remove(dem_output_path_file)
@@ -563,9 +572,10 @@ for (i in 1:length(patterns)){
    
 }
   
-
+########################################################################################################################
 ########################################################################################################################
 ############ Step 5 - Preparing the ancillary data for the classification ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses otb applications: HaralickTextureExtraction (or SelectiveHaralickTextures), RadiometricIndices, ConcatenateImages, SplitImages
 ### Uses grass applications: r.slope.aspect, r.terraflow, r.out.gdal
@@ -602,7 +612,7 @@ execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci
 acc_raster<-raster(accumulation_output_path)
 acc_raster[which(values(acc_raster)<threshold_accumulation_raster)]=0
 acc_raster[which(values(acc_raster)>=threshold_accumulation_raster)]=1
-accumulation_threshold_output_path<-gsub(".TIF","_treshold.tif",file.path(path_to_processing_folder,accumulation_output_path))
+accumulation_threshold_output_path<-gsub(".TIF","_treshold.tif",accumulation_output_path)
 writeRaster(acc_raster,accumulation_threshold_output_path,overwrite=TRUE)
 output_path=file.path(path_to_dem_preprocessed_folder,"accumulation_treshold.gpkg")
 gdal_appli<-paste0("gdal_polygonize.py ",accumulation_threshold_output_path," ",output_path," -b 1 None DN")
@@ -628,7 +638,6 @@ writeRaster(rast,rasters_to_disaggregate[i],overwrite=TRUE)
 
 ##############################################################
 #### 5.2 - extract textural indices from the Spot6/7 image ####
-# IMPORTANT NOTE : USES AN OTB APPLICATION ONLY AVAILABLE IN THE PERSONAL RELEASE OF OTB 
 ##############################################################
 
 # Get image maximum and minimum
@@ -643,7 +652,7 @@ for (i in 1:length(xrad)){
 path_to_simple_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_simple_textural_indices)
 path_to_advanced_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_advanced_textural_indices)
   
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",file.path(path_to_processing_folder,path_to_spot67_preprocessed_pan)," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture simple -out ",path_to_simple_texture)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture simple -out ",path_to_simple_texture)
 system(otb_appli)
 
 ## Split the textures into n bands (1 / texture)
@@ -660,7 +669,7 @@ file.remove(c(path_to_simple_texture,
 
 ## Compute advanced textures
 # Using the application available in the official release (does not enable to select the set of textures)
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",file.path(path_to_processing_folder,path_to_spot67_preprocessed_pan)," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture advanced -out ",path_to_advanced_texture)
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture advanced -out ",path_to_advanced_texture)
 system(otb_appli)
 
 ## Split the textures into n bands (1 / texture)
@@ -692,13 +701,13 @@ file.remove(c(path_to_advanced_texture,
 #### 5.3 - extract radiometric indices from the Spot6/7 image  ####
 ##############################################################
 
-# A list of indices can be found here: https://www.orfeo-toolbox.org/Applications/RadiometricIndices.html
+# The list of available radiometric indices automatically calculated with OTB can be found here: https://www.orfeo-toolbox.org/Applications/RadiometricIndices.html
 for (i in 1:length(radiometric_indices_list_spot67)){
   
   indice<-sub(".*:","",radiometric_indices_list_spot67[i])
-  path_to_output_indice<-file.path(path_to_processing_folder,path_to_spot67_preprocessed_folder,paste0(indice,".TIF"))
+  path_to_output_indice<-file.path(path_to_spot67_preprocessed_folder,paste0(indice,".TIF"))
   
-  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_RadiometricIndices")," -in ",file.path(path_to_processing_folder,path_to_spot67_preprocessed_pansharpen)," -channels.blue 1 -channels.green 2 -channels.red 3 -channels.nir 4 -list ",radiometric_indices_list_spot67[i]," -out ",path_to_output_indice)
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_RadiometricIndices")," -in ",path_to_spot67_preprocessed_pansharpen," -channels.blue 1 -channels.green 2 -channels.red 3 -channels.nir 4 -list ",radiometric_indices_list_spot67[i]," -out ",path_to_output_indice)
   system(otb_appli)
 }
 
@@ -707,17 +716,17 @@ for (i in 1:length(radiometric_indices_list_spot67)){
 #### 5.4 - extract radiometric indices from the Sentinel 2 image ####
 ##############################################################
 
-b03<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B03.TIF"))
-b04<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B04.TIF"))
-b05<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B05.TIF"))
-b06<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B06.TIF"))
-b07<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B07.TIF"))
-b08<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B08.TIF"))
-b08A<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B8A.TIF"))
-b11<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B11.TIF"))
-b12<-raster(file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"B12.TIF"))
+b03<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B03.TIF"))
+b04<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B04.TIF"))
+b05<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B05.TIF"))
+b06<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B06.TIF"))
+b07<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B07.TIF"))
+b08<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B08.TIF"))
+b08A<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B8A.TIF"))
+b11<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B11.TIF"))
+b12<-raster(file.path(path_to_sentinel2_preprocessed_folder,"B12.TIF"))
 
-# disagregate the resolutions of the 20m bands to 10m to be able to compute the indices
+# disagregate the resolutions of the 20m bands to 10m to be able to compute the indices. disagregate does not change the cells values.
 b05<-disaggregate(b05,fact=2)
 b06<-disaggregate(b06,fact=2)
 b07<-disaggregate(b07,fact=2)
@@ -727,40 +736,41 @@ b12<-disaggregate(b12,fact=2)
 
 # Compute NDVI
 ndvi<-(b08-b04)/(b08+b04)
-writeRaster(ndvi,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"NDVI.TIF"))
+writeRaster(ndvi,file.path(path_to_sentinel2_preprocessed_folder,"NDVI.TIF"))
 
 # Compute MNDVI
 mndvi<-(b08-b11)/(b08+b11)
-writeRaster(mndvi,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"MNDVI.TIF"))
+writeRaster(mndvi,file.path(path_to_sentinel2_preprocessed_folder,"MNDVI.TIF"))
 
 # Compute RNDVI
 rndvi<-(b08-b06)/(b08+b06)
-writeRaster(rndvi,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"RNDVI.TIF"))
+writeRaster(rndvi,file.path(path_to_sentinel2_preprocessed_folder,"RNDVI.TIF"))
 
 # Compute BRI
 bri<-sqrt(b03^2+b04^2+b05^2+b06^2+b07^2+b08^2+b08A^2+b11^2+b12^2)
-writeRaster(bri,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"BRI.TIF"))
+writeRaster(bri,file.path(path_to_sentinel2_preprocessed_folder,"BRI.TIF"))
 
 # Compute NDWI
 ndnwi<-(b03-b08)/(b03+b08)
-writeRaster(ndnwi,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"NDWI.TIF"))
+writeRaster(ndnwi,file.path(path_to_sentinel2_preprocessed_folder,"NDWI.TIF"))
 
 # Compute MNDWI
 mndnwi<-(b03-b11)/(b03+b11)
-writeRaster(mndnwi,file.path(path_to_processing_folder,path_to_sentinel2_preprocessed_folder,"MNDWI.TIF"))
+writeRaster(mndnwi,file.path(path_to_sentinel2_preprocessed_folder,"MNDWI.TIF"))
 
 
 ##############################################################
 #### 5.5 - Split the bands of the pansharpened Spot6/7 image ####
 ##############################################################
 
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",file.path(path_to_processing_folder,path_to_spot67_preprocessed_pansharpen)," -out ",file.path(path_to_processing_folder,path_to_spot67_preprocessed_pansharpen)," uint16")
+otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_spot67_preprocessed_pansharpen," -out ",path_to_spot67_preprocessed_pansharpen," uint16")
 system(otb_appli)
 
-
+########################################################################################################################
 ########################################################################################################################
 ############ Step 6 - Segmenting the Spot6/7 image ############
 ## IMPORTANT NOTE : USES AN OTB APPLICATION ONLY AVAILABLE IN THE PERSONAL RELEASE OF OTB 
+########################################################################################################################
 ########################################################################################################################
 ## TODO test with https://github.com/RTOBIA/LSOBIA
 ### Uses otb applications: otbcli_LSGRM
@@ -788,16 +798,14 @@ system(gdal_appli)
 cat("Segmenting the Spot6/7 OK")
 
 ########################################################################################################################
+########################################################################################################################
 ############ Step 7 - Extract zonal statistics for each band / indice   ############
+########################################################################################################################
 ########################################################################################################################
 ### Uses saga application: rsaga.import.gdal, rsaga.geoprocessor
 
-
-# From https://www.r-bloggers.com/rsaga-getting-started/
-# See also https://cran.r-project.org/web/packages/RSAGA/vignettes/RSAGA.html
+# More info on the use of RSAGA here: https://www.r-bloggers.com/rsaga-getting-started/ and here: https://cran.r-project.org/web/packages/RSAGA/vignettes/RSAGA.html
 # Saga must be installed in the computer to use RSAGA. To install on Unbuntu : sudo apt install saga
-
-
 
 # raster data must be converted to .sgrd format to be used in saga
 for (i in 1:length(indices_for_classif_paths)){
@@ -805,11 +813,12 @@ for (i in 1:length(indices_for_classif_paths)){
   rsaga.import.gdal(indices_for_classif_paths[i])
 }
 
+### Function to compute the zonal statistics. It will be used to compute the zonal statistics of the ground truth DB + the segmented objects
 function_compute_zonal_statistics<-function(path_to_input_gpkg_file,path_to_output_gpkg_file,indices_for_classif_paths,indices_for_classif_labels){
 
 # First save an shp version of the geopackage datasets (ground truth and segmentation) since SAGA does not deal with geopackages
 path_to_stats_shp<-gsub(".gpkg",".shp",path_to_output_gpkg_file)
-system(paste0("ogr2ogr ",file.path(path_to_processing_folder,path_to_stats_shp)," ",file.path(path_to_processing_folder,path_to_input_gpkg_file)))
+system(paste0("ogr2ogr ",path_to_stats_shp," ",path_to_input_gpkg_file))
 
 
 # Compute zonal statistics using the Saga Grid Statistics for Polygons function
@@ -818,8 +827,8 @@ for (i in 1:length(indices_for_classif_paths)){
 rsaga.geoprocessor('shapes_grid', module = 2, env = saga_work_env, param = list(
   PARALLELIZED = 'true',
   GRIDS = paste(gsub("TIF|tif","sgrd",indices_for_classif_paths[i]),collapse=';'), # Note that in theory we could integrate multiple raster at the same time, e.g. GRIDS = "/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDWI.sgrd;/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDVI.sgrd". However grids must have the same characteristics (extent)
-  POLYGONS = file.path(path_to_processing_folder,path_to_stats_shp),
-  RESULT = file.path(path_to_processing_folder,path_to_stats_shp),
+  POLYGONS = path_to_stats_shp,
+  RESULT = path_to_stats_shp,
   COUNT='false',
   MIN='false',
   MAX='false',
@@ -831,12 +840,12 @@ rsaga.geoprocessor('shapes_grid', module = 2, env = saga_work_env, param = list(
 }
 
 ## Compute shape statistics with Saga: rsaga.get.usage('shapes_polygons', 7) 
-rsaga.geoprocessor('shapes_polygons', module = 7, env = saga_work_env, param = list(SHAPES = file.path(path_to_processing_folder,path_to_stats_shp)))
+rsaga.geoprocessor('shapes_polygons', module = 7, env = saga_work_env, param = list(SHAPES = path_to_stats_shp))
 
 
 # Open and rename columns (names have been cut since shp does not accept long names)
-input_data<-sf::st_read(file.path(path_to_processing_folder,path_to_input_gpkg_file))
-output_stats<-sf::st_read(file.path(path_to_processing_folder,path_to_stats_shp))
+input_data<-sf::st_read(path_to_input_gpkg_file)
+output_stats<-sf::st_read(path_to_stats_shp)
 cols_to_rename<-setdiff(colnames(output_stats),c("geometry",colnames(input_data)))
 new_colnames<-NULL
 for (i in 1:length(indices_for_classif_labels)){
@@ -856,8 +865,6 @@ if (length(new_colnames)!=length(cols_to_rename)){
 
 # Write data as geopackage
 sf::st_write(output_stats,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
-
-
 
 
 ## Compute shape statistics using the Schwartzberg and the reock indexes. It uses a function extracted from https://github.com/gerrymandr/compactr/blob/master/compactness.R
@@ -887,8 +894,6 @@ reock = function(poly1, mbc = NULL) {
   return(drop_units(st_area(poly1) / st_area(mbc)))
 }
 
-
-
 poly<-sf::st_read(path_to_output_gpkg_file)
 #poly$shape_schwartzberg<-schwartzberg(poly) # equal to shape_index of Saga shapes_polygons index
 poly$shape_reock<-reock(poly)
@@ -913,10 +918,16 @@ if (file.exists(path_to_output_gpkg_file)){
 
 }
 
-# Zonal statistics on the ground truth dataset
+##############################################################
+#### 7.1 - Extract zonal statistics for the ground truth dataset ####
+##############################################################
+
 res<-function_compute_zonal_statistics(path_to_ground_truth_data,path_to_ground_truth_stats,indices_for_classif_paths,indices_for_classif_labels)
 
-# Zonal statistics on the segmented objects dataset
+##############################################################
+#### 7.2 - Extract zonal statistics for the segmented objects dataset ####
+##############################################################
+
 res<-function_compute_zonal_statistics(path_to_segmented_dataset,path_to_segmented_dataset_stats,indices_for_classif_paths,indices_for_classif_labels)
 
 
@@ -924,7 +935,9 @@ res<-function_compute_zonal_statistics(path_to_segmented_dataset,path_to_segment
 file.remove(list.files(path_to_processing_folder,pattern = ".mgrd|.sdat|.sgrd", recursive = TRUE))
 
 ########################################################################################################################
+########################################################################################################################
 ############ Step 8 - Train classifier  ############
+########################################################################################################################
 ########################################################################################################################
 
 ####### Prepare datasets for the classification
@@ -1026,19 +1039,23 @@ paths<-left_join(data.frame(columns_to_keep),df_primitives_types_sources,by = c(
 paths<-unique(data.frame(paths$indice,paths$indices_for_classif_paths))
 paths_indices_to_compute<-paths[which(!is.na(paths$paths.indices_for_classif_paths)),]
 
-# Generate the zonal indices on the objects segmented
-
-
+########################################################################################################################
 ########################################################################################################################
 ############ Step 9 - Classify  ############
 ########################################################################################################################
+########################################################################################################################
 
-ground_truth_df<-read.csv(gsub(".gpkg",".csv",path_to_segmented_dataset_stats))
 
 
+########################################################################################################################
 ########################################################################################################################
 ############ Step 10 - Post-processing  ############
 ########################################################################################################################
+########################################################################################################################
+
+##############################################################
+#### 10.1 - get clean raster dataset  ####
+##############################################################
 
 ## Rasterize the classification
 # Set output raster characteristics
@@ -1052,8 +1069,13 @@ poly<-merge(poly,predicted,by="predicted")
 r <- fasterize::fasterize(poly, r, field = "predicted_integer")
 # Write the classification raster
 writeRaster(r,path_to_output_classification_raster)
+
+##############################################################
+#### 10.2 - get clean vector dataset  ####
+##############################################################
+
 # Vectorize back (now that the adjacent polygons that have the same class have been gathered)
-gdal_appli<-paste0("gdal_polygonize.py ",file.path(path_to_processing_folder,path_to_output_classification_raster)," ",file.path(path_to_processing_folder,gsub(".gpkg","_temp.gpkg",path_to_output_classification_vector))," -b 1 None DN")
+gdal_appli<-paste0("gdal_polygonize.py ",path_to_output_classification_raster," ",gsub(".gpkg","_temp.gpkg",path_to_output_classification_vector)," -b 1 None DN")
 system(gdal_appli)
 # Get back the labels of the classes on the vector version of the classification
 poly<-sf::st_read(gsub(".gpkg","_temp.gpkg",path_to_output_classification_vector))
