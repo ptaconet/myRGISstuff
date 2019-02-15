@@ -86,7 +86,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 
 ### Parameters for step 7
 path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
-path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"ground_truth_v_obj_segmentation_v2.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
+path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
 methods_to_compute<-"average,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
                               "slope",
@@ -183,8 +183,8 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
 )
                              
 ### Parameters for step 8
-column_names_lc_classes<-c("type_1","type_2","type_3") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most detailed land cover, type_2 is a more aggregated classification, etc.>
-column_name_lc_classification<-"type_1" #<Name of the column of land cover class in the ground truth dataset. Column type must be character string>
+column_names_lc_classes<-c("level_1_fr","level_2_fr","level_3_fr","level_4_fr") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc.>
+column_name_lc_classification<-"level_1_fr" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -964,24 +964,8 @@ df_primitives_types_sources<-left_join(df_primitives_types_sources,data.frame(in
 ground_truth_df_model<-ground_truth_df[,c(column_name_lc_classification,column_names_primitives)]
 colnames(ground_truth_df_model)[which(colnames(ground_truth_df_model)==column_name_lc_classification)]<-"response"
 
-# Recursive Feature Elimination does not accept NAs in the predictors. Fill the NAs in the ground truth dataset using the rfImpute function. We do it this way since there are not many NAs in our datasets. Note: we could also use the randomForest::na.roughfix function
-ground_truth_df_model <- randomForest::rfImpute(response ~ ., ground_truth_df_model)
-
-model<-randomForest::randomForest(response ~ ., data=ground_truth_df_model)
-
-# Open segmentation data
-segmentation_gpkg<-sf::st_read(path_to_segmented_dataset_stats)
-segmentation_df<-as.data.frame(segmentation_gpkg)
-segmentation_df$geom<-NULL
-# Fill-in NA values with median value of the column
-segmentation_df<-randomForest::na.roughfix(segmentation_df)
-# predict
-segmentation_df$predicted<-predict(model,segmentation_df)
-segmentation_df<-segmentation_df[,c("cat","predicted")]
-#merge back to segmentation_gpkg
-segmentation_gpkg<-merge(segmentation_gpkg,segmentation_df,by="cat")
-sf::st_write(segmentation_gpkg,path_to_output_classification_vector,layer_options = "OVERWRITE=true")
-
+# Recursive Feature Elimination does not accept NAs in the predictors. Fill the NAs in the ground truth dataset using the na.roughfix function. We do it this way since there are not many NAs in our datasets. Note: we could also use the randomForest::rfImpute function
+ground_truth_df_model <- randomForest::na.roughfix(ground_truth_df_model)
 
 ##############################################################
 #### 8.1 - Parameterize the model ####
@@ -1034,10 +1018,10 @@ ground_truth_df_model<-ground_truth_df_model[,c("response",model_param[[1]])]
 model<-randomForest::randomForest(response ~ ., data=ground_truth_df_model, ntree=model_param[[2]], mtry=model_param[[3]])
 
 # Retrieve the paths of the features to keep
-columns_to_keep<-model_param[[1]]
-paths<-left_join(data.frame(columns_to_keep),df_primitives_types_sources,by = c("columns_to_keep"="column_names_primitives"))
-paths<-unique(data.frame(paths$indice,paths$indices_for_classif_paths))
-paths_indices_to_compute<-paths[which(!is.na(paths$paths.indices_for_classif_paths)),]
+#columns_to_keep<-model_param[[1]]
+#paths<-left_join(data.frame(columns_to_keep),df_primitives_types_sources,by = c("columns_to_keep"="column_names_primitives"))
+#paths<-unique(data.frame(paths$indice,paths$indices_for_classif_paths))
+#paths_indices_to_compute<-paths[which(!is.na(paths$paths.indices_for_classif_paths)),]
 
 ########################################################################################################################
 ########################################################################################################################
@@ -1045,6 +1029,18 @@ paths_indices_to_compute<-paths[which(!is.na(paths$paths.indices_for_classif_pat
 ########################################################################################################################
 ########################################################################################################################
 
+# Open objects segmentation dataset
+segmentation_gpkg<-sf::st_read(path_to_segmented_dataset_stats)
+segmentation_df<-as.data.frame(segmentation_gpkg)
+segmentation_df$geom<-NULL
+# Fill-in NA values with median value of the column (using randomForest::na.roughfix)
+segmentation_df<-randomForest::na.roughfix(segmentation_df)
+# Predict land cover class using the predict fonction with the model extracted in step 8
+segmentation_df$predicted<-predict(model,segmentation_df)
+# Merge back to segmentation_gpkg and write geopackage with the predicted values of the objects
+segmentation_df<-segmentation_df[,c("cat","predicted")]
+segmentation_gpkg<-merge(segmentation_gpkg,segmentation_df,by="cat")
+sf::st_write(segmentation_gpkg,path_to_output_classification_vector,layer_options = "OVERWRITE=true")
 
 
 ########################################################################################################################
