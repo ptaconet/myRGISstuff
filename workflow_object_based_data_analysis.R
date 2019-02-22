@@ -183,7 +183,7 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
 )
                              
 ### Parameters for step 8
-column_names_lc_classes<-c("level_1_fr","level_2_fr","level_3_fr","level_4_fr") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc.>
+column_names_lc_classes_hierarchy<-c("level_1_fr","level_2_fr","level_3_fr","level_4_fr","level_5_fr") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc.>
 column_name_lc_classification<-"level_1_fr" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
@@ -952,7 +952,7 @@ ground_truth_df$X=NULL
 ground_truth_df$cat=NULL
 
 ## Get primitives (features) paths for further calculation of the zonal statistics on the segmented objects 
-column_names_primitives<-setdiff(colnames(ground_truth_df),column_names_lc_classes)
+column_names_primitives<-setdiff(colnames(ground_truth_df),column_names_lc_classes_hierarchy)
 df_primitives_types_sources<-as.data.frame(column_names_primitives,stringsAsFactors=FALSE)
 pattern<-strsplit(methods_to_compute, split=',')[[1]]
 pattern<-paste(pattern,collapse = '|_')
@@ -1108,17 +1108,17 @@ file.remove(file.path(getwd(),".grassrc7"))
 # convert as data frame for future processings
 #ground_truth_df<-as.data.frame(ground_truth)
 # Set land cover classes as integers
-#for (i in 1:length(column_names_lc_classes)){
-#gt_lc_types<-data.frame(lc_type=unique(ground_truth_df[,column_names_lc_classes[i]]))
-#gt_lc_types[,paste0(column_names_lc_classes[i],"_int")]<-seq(1:nrow(gt_lc_types))
-#ground_truth<-merge(ground_truth,gt_lc_types,by.x=column_names_lc_classes[i],by.y="lc_type")
-#ground_truth_df<-merge(ground_truth_df,gt_lc_types,by.x=column_names_lc_classes[i],by.y="lc_type")
+#for (i in 1:length(column_names_lc_classes_hierarchy)){
+#gt_lc_types<-data.frame(lc_type=unique(ground_truth_df[,column_names_lc_classes_hierarchy[i]]))
+#gt_lc_types[,paste0(column_names_lc_classes_hierarchy[i],"_int")]<-seq(1:nrow(gt_lc_types))
+#ground_truth<-merge(ground_truth,gt_lc_types,by.x=column_names_lc_classes_hierarchy[i],by.y="lc_type")
+#ground_truth_df<-merge(ground_truth_df,gt_lc_types,by.x=column_names_lc_classes_hierarchy[i],by.y="lc_type")
 #}
 
 #writeOGR(ground_truth,path_to_ground_truth_processed,driver = "GPKG",layer="ground_truth",overwrite_layer = TRUE)
 
 # Get training samples ids. We keep 70% of the data for training (size=0.7) and 30% for validation
-#ground_truth_training<-ground_truth_df %>% group_by_(paste0(column_names_lc_classes,"_int")) %>% sample_frac(size = 0.7)
+#ground_truth_training<-ground_truth_df %>% group_by_(paste0(column_names_lc_classes_hierarchy,"_int")) %>% sample_frac(size = 0.7)
 #ground_truth_training_ids<-ground_truth_training$id
 # Get validation samples ids
 #ground_truth_validation_ids<-setdiff(ground_truth_df$id,ground_truth_training_ids)
@@ -1145,7 +1145,7 @@ file.remove(file.path(getwd(),".grassrc7"))
 # Set column names for the classification
 #ground_truth_training<-as.data.frame(readOGR(path_to_ground_truth_training_stats,stringsAsFactors = F))
 # All columns :
-#columns_stats<-setdiff(colnames(ground_truth_training),c(column_names_lc_classes,"cat","cat_","id",paste0(column_names_lc_classes,"_int")))
+#columns_stats<-setdiff(colnames(ground_truth_training),c(column_names_lc_classes_hierarchy,"cat","cat_","id",paste0(column_names_lc_classes_hierarchy,"_int")))
 # 
 
 # Generate the input XML statistics file (used as input of the OTB TrainVectorClassifier application)
