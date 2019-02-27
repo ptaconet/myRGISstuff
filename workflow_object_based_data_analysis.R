@@ -1,48 +1,107 @@
 ######################################################################
 ##### 52North WPS annotations ##########
 ######################################################################
-# wps.des: id = workflow_object_based_data_analysi, title = Workflow for the land cover classification using object based image analysis, abstract = This script is a workflow for the object based image analysis work used to create the land cover maps. It performs all the pre-processing, data preparation, classification and post-processing steps. The script uses applications of the Orfeo Toolbox v6.6.1 (https://www.orfeo-toolbox.org/), the GRASS library v7.4 (https://grass.osgeo.org)  and the GDAL library v2.2.1 ()
-# wps.in: id = path_to_otbApplications_folder, type = string, title = Path to the folder containing the OTB applications. , value = "/home/ptaconet/OTB-6.6.1-Linux64/bin";
+# wps.des: id = workflow_hierarchical_random_forest_and_obia_classification, title = Workflow for the generation of land cover map using a combined object based image analysis and a hierarchical random forest classification approach , abstract = This script creates a land cover map on a region of interest using a supervised object based image analysis approach combined with a hierarchical random forest classification. The hierarchical classification enables to account for the class hierarchical structure. Additional information are provided below.
+# wps.in: id = path_to_otbApplications_folder, type = string, title = Path to the folder containing the Orfeo Toolbox applications. , value = "/home/ptaconet/OTB-6.6.1-Linux64/bin";
 # wps.in: id = path_to_grassApplications_folder, type = string, title = Path to the folder containing the GRASS applications. , value = "/usr/lib/grass74";
-# wps.in: id = path_to_processing_folder, type = string, title = Path to working folder , value = "/home/ptaconet/Documents/react/data_CIV";
-# wps.in: id = path_to_roi_vector, type = string, title = Path to the ROI in kml or shp format, value = "ROI.kml";
-# wps.in: id = path_to_spot67_raw_folder, type = string, title = Path to the folder where input data (i.e. Spot6/7 products as tar.gz files) are stored , value = "VHR_SPOT6/raw_data";
-# wps.in: id = path_to_dem_raw_folder, type = string, title = Path to the folder containing the SRTM Digital Elevation Model files. value = "DEM_SRTM/raw_data";
-# wps.out: id = output_zip, type = text/zip, title = Folder path_to_spot67_preprocessed_folder containing the data pre-processed: for each input product, the orthorectified multispectral image (extracted on the ROI), the orthorectified panchromatic image (extracted on the ROI), the orthorectified pansharpened image (extracted on the ROI). In addition, if there are multiple input products, the previously mentioned products will be mosaiced 
+# wps.in: id = path_to_processing_folder, type = string, title = Path to working folder (i.e. where all input and ouput datasets are/will be stored) , value = "/home/ptaconet/Documents/react/data_CIV";
+# wps.in: id = path_to_roi_vector, type = string, title = Relative path to the ROI in kml or shp format in the path_to_processing_folder folder, value = "ROI.kml";
+# wps.in: id = path_to_spot67_raw_folder, type = string, title = Relative path to the folder containing the Spot 6/7 raw data (tar.gz files) in the path_to_processing_folder folder, value = "VHR_SPOT6/raw_data";
+# wps.in: id = path_to_groundtruth_folder, type = string, title = Relative path to the folder containing the gound truth (i.e. training/validation) dataset in the path_to_processing_folder folder, value = "Ground_truth";
+# wps.in: id = path_to_ground_truth_data, type = string, title = Name of the ground truth dataset in the vfolder, value = "groundtruth_bf.gpkg" ;
+# wps.in: id = column_names_lc_classes_hierarchy, type = string, title = Vector of the columns names of land cover classes in the ground truth dataset, with the hierarchical structure. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc., value = c("level_1_fr","level_2_fr","level_3_fr","level_4_fr","level_5_fr") ;
+# wps.in: id = column_name_lc_classification, type = string, title =  Desired hierarchy level for the final classification, value = "level_4_fr";
+# wps.in: id = copernicus_scihub_username, type = string, title = Copenicus scihub username (to download Sentinel 2 data), value = "user";
+# wps.in: id = copernicus_scihub_password, type = string, title = Copenicus scihub password, value = "***";
+# wps.in: id = Sentinel2_products_id, type = string, title = Vector of Ids of the S2 products to download in the Copernicus Scihub, value = c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de") ;
+# wps.in: id = proj_srs, type = string, title = Proj srs for the ROI, value = "+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs" ;
+# wps.in: id = threshold_accumulation_raster, type = integer, Threshold to use for the water accumulation raster file as hydrographic network. All cells above this threshold are considered as the hydrographic network., value = "800" ;
+# wps.in: id = xrad, type = string, value = Vector of sizes of the moving windows in the x direction for the computation of the textures from the Spot 6/7 panchromatic images, value = c(5,9,17) ;
+# wps.in: id = yrad, type = string, value = Vector of sizes of the moving windows in the y direction for the computation of the textures from the Spot 6/7 panchromatic images, value = c(5,9,17) ;
+# wps.in: id = nnbin, type = integer, value = Number of bins to consider for the computation of the textures from the Spot 6/7 panchromatic images, value = 64 ;
+# wps.in: id = radiometric_indices_list_spot67, type = string, value = Vector of radiometric indices to compute from the Spot 6/7 image for the classification, value = c("Vegetation:NDVI","Water:NDWI","Soil:BI") ;
+# wps.in: id = segmentation_threshold, type = integer, value = Scale parameter for the VHRS segmentation, value = 100 ;
+# wps.in: id = segmentation_cw, type = float, value = Shape parameter for the segmentation, value = 0.1 ;
+# wps.in: id = segmentation_sw, type = float, value = Spectral parameter for the segmentation, value = 0.9 ;
 
-#### Workflow :
-### Step 1 - Download the SRTM tiles for the ROI
-### Step 2 - Pre-process the Spot6/7 image(s) :
+#### Important information
+# The script takes as input a Very high resolution image of the area of interesed (Spot 6/7) + the Copernicus scihub identifiers of a High resolution image (Sentinel 2) + a learning/validation ground truth dataset, enventually with a class hierarchical structure. 
+# It performs all the pre-processing, data preparation, classification and post-processing steps. Details are provided below. 
+# The script uses various R packages (see section "prepare workflow" for a list of packages used) and open-source libraries that are called through R : the Orfeo Toolbox v6.6.1 (https://www.orfeo-toolbox.org/), the GRASS library v7.4 (https://grass.osgeo.org), the GDAL library v2.2.1 (https://www.gdal.org/) and SAGA GIS v2.3.1 (http://www.saga-gis.org/en/index.html). In addition, the workflow uses a personal release of the Orfeo Toolbox for the segmentation process (since no relevant application was found in the official OTB release for the segmentation of very large images using the Baatz and Shape Generic Region Merging algorithm). The release was generated and kindly provided by Rafaelle Gaetano. It is available here: http://napoli.teledetection.fr/logiciels/otb_moringa_build_win_x64.zip
+# The methodology used in this workflow was inspired from these two articles and uses an R package developed in the frame of the Gavish et al. article (with minor adaptations for this workflow): 
+  # - Gavish et al., Comparing the performance of flat and hierarchical Habitat/Land-Cover classification models in a NATURA 2000 site, ISPRS Journal of Photogrammetry and Remote Sensing. Volume 136, February 2018, Pages 1-12 https://doi.org/10.1016/j.isprsjprs.2017.12.002
+  # - Lebourgeois et al., A Combined Random Forest and OBIA Classification Scheme for Mapping Smallholder Agriculture at Different Nomenclature Levels Using Multisource Data (Simulated Sentinel-2 Time Series, VHRS and DEM). Remote Sens. 2017, 9, 259.   https://doi.org/10.3390/rs9030259
+
+#### Workflow steps :
+### Step 1 - Download the Digital Elevation Model (SRTM tiles) for the ROI
+### Step 2 - Pre-process the VHRS Spot6/7 image(s) :
   ## 2.1 - fusion the tiles of the panchromatic image
   ## 2.2 - convert the multispectral and panchromatic images from digital numbers to TOA reflectance
-  ## 2.3 - orthorectifying the multispectral and panchromatic images
+  ## 2.3 - orthorectify the multispectral and panchromatic images
   ## 2.4 - extract the ROI
-  ## 2.5 - pansharpen
+  ## 2.5 - pansharpen the MS image using the PAN image
   ## 2.6 - mosaic the various tiles covering the ROI (if relevant)
 ### Step 3 - Download the ancillary data :
-  ## 3.1 - Download Sentinel 2 image(s)
+  ## 3.1 - Download the HRS Sentinel 2 image(s) from the Copernicus scihub
 ### Step 4 - Preprocess the ancillary data :
   ## 4.1 - preprocess the DEM : mosaic the various tiles covering the ROI (if relevant), and then extract the ROI
   ## 4.2 - preprocess the Sentinel 2 image(s) : mosaic the various images covering the ROI (if relevant), and then extract the ROI
 ### Step 5 - Prepare the data for the classification : 
-  ## 5.1 - extract indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index
-  ## 5.2 - extract textural indices from the Spot6/7 panchromatic image : 
-  ## 5.3 - extract radiometric indices from the Spot6/7 pansharpened image : 
-  ## 5.4 - extract radiometric indices from the S2 image : 
+  ## 5.1 - extract ancillary indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index, 
+  ## 5.2 - extract textural indices from the Spot6/7 panchromatic image at various moving windows sizes
+  ## 5.3 - extract radiometric indices from the Spot6/7 pansharpened image
+  ## 5.4 - extract radiometric indices from the S2 image
   ## 5.5 - Split the bands of the Spot6/7 image
-### Step 6 - Segment the Spot6/7 image 
-### Step 7 - Extract zonal statistics (radiometric, textural, ancillary, shape, contextual)
+### Step 6 - Segment the Spot6/7 image using the Baatz and Shape Generic Region Merging algorithm
+### Step 7 - Extract the zonal statistics (reflectance, spectral indices, textural indices, ancillary, shape, contextual)
   ## 7.1 - Extract zonal statistics for the ground truth dataset
   ## 7.2 - Extract zonal statistics for the segmented objects dataset
-### Step 8 - Train the classifier : generate the classification model using random forest
-  ## 8.1 - Parameterize the model: features to keep, optimum number of trees, optimum number of variables to test at each division
-### Step 9 - Classify
-  ## 9.1 Classify the segmented objects using the model prepared at step 9
-  ## 9.2 Rasterize the output
-### Step 10 - Post - process
-  ## 10.1 Get clean raster dataset
-  ## 10.2 Get clear vector dataset
+### Step 8 - Classify : generate a set of random forest classifiers with a class hierarchy approach and classify the objects output of the segmentation process
+  ## 8.1 - Generate the classifiers and extract information about the classification (confusion matrix, performance indices, plots of variables importance)
+  ## 8.2 - Classify the objects output of the segmentation
+### Step 9 - Post - process
+  ## 9.1 Add user criterions to enhance the classification
+  ## 9.2 Rasterize the classification
+  ## 9.3 Group the adjacent objects with the same class on the vector version of the classification
 
+
+#### Outputs: In the path_to_processing_folder, the following folders and files will be available : 
+  ### folder "DEM_SRTM" : data regarding the SRTM Digital Elevation Model [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+    ## DEM_SRTM/raw_data : SRTM tile(s) covering the ROI (step 1)
+    ## DEM_SRTM/processed_data : a set of files derived from the DEM, output of the workflow :
+      # - DEM.tif : SRTM DEM cut following the ROI and re-projected in the proj_srs (step 4) ;
+      # - slope.tif : slope dataset derived from the DEM (step 5.1) ;
+      # - aspect.tif : aspect dataset derived from the DEM (step 5.1);
+      # - accumulation.tif : flow accumulation dataset derived from the DEM (step 5.1);
+      # - direction.tif : flow direction dataset derived from the DEM (step 5.1);
+      # - tci.tif : topographic convergence index derived from the DEM (note : not used in further analysis) (step 5.1);
+      # - accumulation_treshold.tif : raster with two values : 0 if the flow accumulation is above the threshold_accumulation_raster , 1 if it is under. This information is used for the calculation of the distance from the objects to the flow accumulation network (used as primitive in the classification). (step 5.1) ;
+      # - accumulation_treshold_vector.gpkg : vector version of accumulation_treshold.tif (step 5.1) ;
+  ### folder "VHR_SPOT6" : data regarding the VHRS Spot 6/7 satellite images
+    ## VHR_SPOT6/raw_data : the input Spot 6/7 data (as provided by the CNES). Must be provided by the user before execution of the workflow. There must be 1 sub-folder by image covering the ROI. Each sub-folder contains the two .tar.gz files as provided by the CNES : one for the panchromatic image and one for the multispectral image [PROVIDED BY THE USER]
+    ## VHR_SPOT6/processed_data : a set of files derived from the Spot 6/7 datasets, output of the workflow:  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+      # - PAN.TIF : the panchromatic image, mosaiced, orthorectified and cut following the ROI (step 2.x) ;
+      # - PANSHARPEN.TIF : the multispectral image pansharpened using the panshromatic image, orthorectified and cut following the ROI (step 2.x) ;
+      # - PANSHARPEN_0.TIF, PANSHARPEN_1.TIF, PANSHARPEN_2.TIF, PANSHARPEN_3.TIF : respectively the blue, green, red and nir bands of the VHRS (step 2.x) ;
+      # - HaralickTextures_xxxx.TIF : the set of textures generated using from the panchromatic image, at various moving windows sizes (step 5.2) ;
+      # - NDVI.TIF, NDWI.TIF, BI.TIF : the radiometric indices derived from the VHRS (step 5.3).
+  ### folder "HR_Sentinel2" : data regarding the HRS Sentinel 2 satellite images  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+    ## HR_Sentinel2/raw_data : the input Sentinel 2 data (as downloaded by the WF in the Copernicus Scihub) (step 3.1). 
+    ## HR_Sentinel2/processed_data : a set of files derived from the Sentinel 2 dataset(s), output of the workflow 
+      # B01.TIF, BO2.TIF, etc... B12.TIF : bands of the Sentinel 2 images cut following the ROI. If multiple images are provided as input (i.e. if the ROI is covered by multiple tiles), the images will be mosaiced first (step 4.2 and 5.5) ;
+      # BRI.TIF, MNDVI.TIF, MNDWI.TIF, NDVI.TIF, NDWI.TIF, RNDVI.TIF : the radiometric indices derived from the HRS. Formulas are provided in the workflow, section 5.4 (step 5.4) ;
+  ### folder "Segmentation" : [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+      # segmentation_vector.gpkg : vector output of the segmentation process (i.e. objects that will further be classified) (step 6) ;
+      # segmentation_dataset_stats.gpkg : segmented datasets with the zonal statistics for each object (step 7.2).
+  ### folder "Ground_truth" : data regarding the ground truth (i.e. training/validation) dataset 
+      # path_to_ground_truth_data : ground truth dataset provided by the user, including the class hierarchical structure ; 
+      # ground_truth_stats.gpkg : ground truth dataset with the zonal statistics for each object (step 7.1)
+  ### folder "Classification" : data regarding the classification [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]  ########## A FINIR 
+      # classes_hierarchy.png : an image of the class hierarchical structure (step 8.1) ; 
+      # classification_vector.gpkg : a vector version of the output classification 
+
+
+#### Start Workflow
 ########################################################################################################################
 ############ Set Input parameters for the workflow ############
 ########################################################################################################################
@@ -87,7 +146,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 ### Parameters for step 7
 path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
 path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
-methods_to_compute<-"average,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
+methods_to_compute<-"avg,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
                               "slope",
                               "accumulation",
@@ -104,10 +163,10 @@ indices_for_classif_labels<-c("DEM",
                               "B8A_S2",
                               "B11_S2",
                               "B12_S2",
-                              "B0_SPOT6",
-                              "B1_SPOT6",
-                              "B2_SPOT6",
-                              "B3_SPOT6",
+                              "blue_SPOT6",
+                              "green_SPOT6",
+                              "red_SPOT6",
+                              "nir_SPOT6",
                               "PAN_SPOT6",
                               "text_energy_5",
                               "text_entropy_5",
@@ -184,7 +243,7 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
                              
 ### Parameters for step 8
 column_names_lc_classes_hierarchy<-c("level_1_fr","level_2_fr","level_3_fr","level_4_fr","level_5_fr") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc.>
-column_name_lc_classification<-"level_1_fr" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
+column_name_lc_classification<-"level_4_fr" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -271,6 +330,72 @@ orthorectify_spot67<-function(input_path,output_path,otbapplications_folder_path
   }
 }
 
+## Function to plot the importance of the primitives at each classification level on the hierarchical classification approach using random forest. This function is adapted from the HieRanFor::PlotImportanceHie function
+PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.data = 4, explanatory.variable = 5, explanatory.variable.name="type", plot.type = "Tile", 
+                                       imp.title = colnames(input.data)[imp.data], X.Title = colnames(input.data)[X.data], 
+                                       Y.Title = colnames(input.data)[Y.data], low.col = "blue", 
+                                       high.col = "red", geom.tile.bor.col = "white", pos.col = "green", 
+                                       zero.col = "white", neg.col = "red", supp.warn = TRUE, ...) 
+{
+  X.var <- Y.var <- NULL
+  localenv <- environment()
+  if (plot.type != "Tile" && plot.type != "Bubble") {
+    stop("\nplot.type can be either 'Tile' or 'Bubble'\n")
+  }
+  work.data <- input.data[, c(X.data, Y.data, imp.data, explanatory.variable)]
+  colnames(work.data) <- c("X.var", "Y.var", "imp.var", "type")
+  # BUG IN THE SOURCE FUNCTION WITH THE FOLLOWING LINES : 
+  #work.data$X.var <- suppressWarnings(factor(work.data$X.var, 
+  #                                          as.character(work.data$X.var)))
+  #work.data$Y.var <- suppressWarnings(factor(work.data$Y.var, 
+  #                                           as.character(work.data$Y.var)))
+  
+  # PTACONET FIX BUG :
+  work.data$X.var <- suppressWarnings(as.factor(as.character(work.data$X.var)))
+  work.data$Y.var <- suppressWarnings(as.factor(as.character(work.data$Y.var)))
+  work.data$type <- suppressWarnings(as.factor(as.character(work.data$type)))
+  work.data=work.data[order(work.data$type),]
+  
+  if (plot.type == "Tile") {
+    p <- ggplot(work.data, aes(X.var, Y.var), environment = localenv)
+    p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col)
+    p <- p + xlab(X.Title)
+    p <- p + ylab(Y.Title)
+    p <- p + scale_fill_continuous(low = low.col, high = high.col, 
+                                   guide = "colourbar", guide_colourbar(title = imp.title))
+  }
+  if (plot.type == "Bubble") {
+    #for (k3 in 1:dim(work.data)[1]) {
+    #  if (work.data[k3, 3] > 0) {
+    #    work.data[k3, 4] <- "Positive"
+    #  }
+    #  if (work.data[k3, 3] == 0) {
+    #    work.data[k3, 4] <- "Zero"
+    #  }
+    #  if (work.data[k3, 3] <= 0) {
+    #    work.data[k3, 4] <- "Negative"
+    #  }
+    #}
+    #colnames(work.data)[4] <- "sign.imp"
+    #fillScaleValues <- c(Positive = pos.col, Zero = zero.col, 
+    #                     Negative = neg.col)
+    p <- ggplot(work.data, aes(X.var, Y.var), environment = localenv)
+    p <- p + geom_point(aes(size = abs(work.data$imp.var), 
+                            fill = work.data[,4]), shape = 21) + facet_grid(type~.,scales="free_y",space="free_y")
+    p <- p + xlab(X.Title)
+    p <- p + ylab(Y.Title)
+    p <- p + scale_size_continuous(guide = "legend", guide_legend(title = imp.title))
+    #p <- p + scale_fill_manual(values = fillScaleValues, 
+    #                           name = explanatory.variable.name)
+  }
+  if (supp.warn) {
+    return(suppressWarnings(print(p)))
+  }
+  else {
+    return(print(p))
+  }
+}
+
 
 ### Call useful packages
 require(raster)
@@ -283,11 +408,12 @@ require(dplyr)
 require(reshape)
 require(randomForest)
 require(caret)
+require(HieRanFor) ## Downloaded in the supplementary material of the Gavish et al. article. To download here: https://ars.els-cdn.com/content/image/1-s2.0-S0924271617303696-mmc5.zip and manually install on the R packages folder of your system.
 
 ### Set working directory
 setwd(path_to_processing_folder)
 
-## Set paths of output folders / files
+### Set the paths of output folders / files
 path_to_spot67_raw_folder<-file.path(path_to_processing_folder,"VHR_SPOT6/raw_data") # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
 # Step 1
 path_to_dem_raw_folder=file.path(path_to_processing_folder,"DEM_SRTM/raw_data") # Path to the folder where the DEM raw data will be stored
@@ -310,7 +436,7 @@ path_to_output_accumulation_threshold<-file.path(path_to_dem_preprocessed_folder
 path_to_segmentation_folder<-file.path(path_to_processing_folder,"Segmentation") # Path to the folder where the outputs of the segmentation process will be stored
 path_to_segmented_dataset<-file.path(path_to_segmentation_folder,"segmentation_vector.gpkg")
 # Step 7
-path_to_ground_truth_stats<-file.path(path_to_groundtruth_folder,"ground_truth_stats.gpkg") # Path to the ground truth datasets with zonal statistics
+path_to_ground_truth_stats<-file.path(path_to_groundtruth_folder,"ground_truth_stats_v_hierran.gpkg") # Path to the ground truth datasets with zonal statistics
 path_to_zonalstatistics_folder<-file.path(path_to_processing_folder,"Zonal_statistics") # Path to the folder where the output of the zonal statistics process will be stored
 # Step 8
 path_to_segmented_dataset_stats<-file.path(path_to_segmentation_folder,"segmented_dataset_stats.gpkg") # Path to the object segmented datasets with zonal statistics
@@ -321,15 +447,15 @@ path_to_output_classification_vector<-file.path(path_to_classification_folder,"c
 # Step 10
 path_to_output_classification_raster<-file.path(path_to_classification_folder,"classification_raster.tif")
 
-## Create directories
+## Create the output folders
 directories<-list(path_to_dem_raw_folder,path_to_spot67_preprocessed_folder,path_to_sentinel2_raw_folder,path_to_dem_preprocessed_folder,path_to_sentinel2_preprocessed_folder)
 lapply(directories, dir.create)
 
-# Set GRASS environment and database location 
+## Set GRASS environment and database location 
 loc <- rgrass7::initGRASS(path_to_grassApplications_folder, home=getwd(), gisDbase="GRASS_TEMP", override=TRUE,mapset = "PERMANENT" )
 execGRASS("g.proj",flags="c",parameters = list(proj4=proj_srs))
 
-# Set saga environment
+## Set saga environment
 saga_work_env <- RSAGA::rsaga.env()
 
 ########################################################################################################################
@@ -496,6 +622,7 @@ cat("Pre-processing the Spot6/7 products OK")
 ##############################################################
 #### 3.1 - Download Sentinel 2 data ####
 ##############################################################
+####### BUG TO FIX
 
 cat("Downloading the ancillary data: Sentinel 2 product(s) ...")
 ### NOT WORK
@@ -584,7 +711,7 @@ for (i in 1:length(patterns)){
 ##############################################################
 #### 5.1 - extract indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index ####
 ##############################################################
-## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow
+## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
 
 # Set output paths
 slope_output_path<-file.path(path_to_dem_preprocessed_folder,"slope.tif")
@@ -813,10 +940,10 @@ for (i in 1:length(indices_for_classif_paths)){
   rsaga.import.gdal(indices_for_classif_paths[i])
 }
 
-### Function to compute the zonal statistics. It will be used to compute the zonal statistics of the ground truth DB + the segmented objects
+### Function to compute the zonal statistics. It will be used to compute the zonal statistics of the ground truth dataset + the segmented objects
 function_compute_zonal_statistics<-function(path_to_input_gpkg_file,path_to_output_gpkg_file,indices_for_classif_paths,indices_for_classif_labels){
 
-# First save an shp version of the geopackage datasets (ground truth and segmentation) since SAGA does not deal with geopackages
+# First create an shp version of the geopackage datasets (ground truth and segmentation) since SAGA does not deal with geopackages
 path_to_stats_shp<-gsub(".gpkg",".shp",path_to_output_gpkg_file)
 system(paste0("ogr2ogr ",path_to_stats_shp," ",path_to_input_gpkg_file))
 
@@ -867,7 +994,7 @@ if (length(new_colnames)!=length(cols_to_rename)){
 sf::st_write(output_stats,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
 
 
-## Compute shape statistics using the Schwartzberg and the reock indexes. It uses a function extracted from https://github.com/gerrymandr/compactr/blob/master/compactness.R
+## Compute shape statistics using reock indexes. It uses a function extracted from https://github.com/gerrymandr/compactr/blob/master/compactness.R
 # Source the functions with : source("https://raw.githubusercontent.com/gerrymandr/compactr/master/compactness.R")
 # We copied them here for offline processing
 
@@ -931,98 +1058,99 @@ res<-function_compute_zonal_statistics(path_to_ground_truth_data,path_to_ground_
 res<-function_compute_zonal_statistics(path_to_segmented_dataset,path_to_segmented_dataset_stats,indices_for_classif_paths,indices_for_classif_labels)
 
 
-## Remove saga files
+## Remove saga files (very big files...)
 file.remove(list.files(path_to_processing_folder,pattern = ".mgrd|.sdat|.sgrd", recursive = TRUE))
 
 ########################################################################################################################
 ########################################################################################################################
-############ Step 8 - Train classifier  ############
+############ Step 8 - Classify  ############
 ########################################################################################################################
 ########################################################################################################################
 
 ####### Prepare datasets for the classification
 
 # To ensure that simulations or random objects can be reproduced (more info: http://rfunction.com/archives/62). It must be called each time a new simulation or random object is run
-set.seed(1)
+set.seed(158)
 
 # Read the ground truth dataset with zonal statistics 
-ground_truth_df<-read.csv(gsub(".gpkg",".csv",path_to_ground_truth_stats))
+ground_truth_df<-as.data.frame(sf::st_read(path_to_ground_truth_stats))
 # Remove useless columns
 ground_truth_df$X=NULL
-ground_truth_df$cat=NULL
+ground_truth_df$landcover_class=NULL
+ground_truth_df$geom=NULL
 
-## Get primitives (features) paths for further calculation of the zonal statistics on the segmented objects 
-column_names_primitives<-setdiff(colnames(ground_truth_df),column_names_lc_classes_hierarchy)
+## Set dataframe of primitives types (HSR, VHSR, ancillary), sources (reflectance, spectral_indice, ancillary, texture), stat (average,stddev,other)
+# Not necessary for the classification but interesting for additional information on the classification (variable importance, etc.)
+column_names_primitives<-setdiff(colnames(ground_truth_df),c(column_names_lc_classes_hierarchy,"cat"))
 df_primitives_types_sources<-as.data.frame(column_names_primitives,stringsAsFactors=FALSE)
+
+df_primitives_types_sources$type<-NA
+df_primitives_types_sources$source<-NA
+df_primitives_types_sources$stat<-NA
+
+df_primitives_types_sources$type[which(grepl("S2",df_primitives_types_sources$column_names_primitives))]<-"HSR"
+df_primitives_types_sources$type[which(grepl("SPOT6",df_primitives_types_sources$column_names_primitives))]<-"VHSR"
+df_primitives_types_sources$type[which(grepl("text",df_primitives_types_sources$column_names_primitives))]<-"VHSR"
+df_primitives_types_sources$type[which(is.na(df_primitives_types_sources$type))]<-"ancillary"
+
+df_primitives_types_sources$source[which(grepl("text",df_primitives_types_sources$column_names_primitives))]<-"texture"
+df_primitives_types_sources$source[which(grepl("NDVI|NDWI|BI|BRI|MNDVI|MNDWI|RNDVI",df_primitives_types_sources$column_names_primitives))]<-"spectral_indice"
+df_primitives_types_sources$source[which(grepl("shape|dist_to_hydro|DEM|slope|accumulation",df_primitives_types_sources$column_names_primitives))]<-"ancillary"
+df_primitives_types_sources$source[which(is.na(df_primitives_types_sources$source))]<-"reflectance"
+
+df_primitives_types_sources$stat[which(grepl("avg",df_primitives_types_sources$column_names_primitives))]<-"average"
+df_primitives_types_sources$stat[which(grepl("stddev",df_primitives_types_sources$column_names_primitives))]<-"stddev"
+df_primitives_types_sources$stat[which(is.na(df_primitives_types_sources$stat))]<-"absolute"
+
 pattern<-strsplit(methods_to_compute, split=',')[[1]]
 pattern<-paste(pattern,collapse = '|_')
 pattern<-paste0("_",pattern)
 df_primitives_types_sources$indice<-gsub(pattern,"",df_primitives_types_sources$column_names_primitives)
 df_primitives_types_sources<-left_join(df_primitives_types_sources,data.frame(indices_for_classif_labels,indices_for_classif_paths,stringsAsFactors = F),by=c("indice"="indices_for_classif_labels"))
 
-# Keep only useful columns in the GT dataset (i.e. column to classify + primitives) and rename column to classify (response)
-ground_truth_df_model<-ground_truth_df[,c(column_name_lc_classification,column_names_primitives)]
-colnames(ground_truth_df_model)[which(colnames(ground_truth_df_model)==column_name_lc_classification)]<-"response"
+# Keep only useful columns in the GT dataset (i.e. hierarchy of columns to classify + primitives + unique identifiers)
+column_names_lc_classes_hierarchy<-column_names_lc_classes_hierarchy[1:which(column_names_lc_classes_hierarchy==column_name_lc_classification)]
+ground_truth_df_model<-ground_truth_df[,c("cat",column_names_lc_classes_hierarchy,column_names_primitives)]
 
-# Recursive Feature Elimination does not accept NAs in the predictors. Fill the NAs in the ground truth dataset using the na.roughfix function. We do it this way since there are not many NAs in our datasets. Note: we could also use the randomForest::rfImpute function
+# Fill the NAs in the ground truth dataset using the na.roughfix function. We do it this way since there are only few NAs in our datasets. Note: we could also use the randomForest::rfImpute function
 ground_truth_df_model <- randomForest::na.roughfix(ground_truth_df_model)
 
 ##############################################################
-#### 8.1 - Parameterize the model ####
+#### 8.1 - Setup the RF classifiers using a hierarchical approach ####
 ##############################################################
 
-# get_optimum_rf_model: Function to get the optimum parameters for the model.
-  # - Selects the optimum features to keep in the model (by running the model with the default parameters). Feature selection uses the Recursive Feature Elimination (RFE) of the caret package. Useful information about the RFE can be found here: http://topepo.github.io/caret/recursive-feature-elimination.html . Examples of implentations of the RFE can be found here: https://machinelearningmastery.com/feature-selection-with-the-caret-r-package/ and here: https://www.r-bloggers.com/feature-selection-using-the-caret-package/
-  # - Selects the optimum number of trees (ntrees)
-  # - Selects the optimum number of variables to test at each division (mtry)
-# Input: 
-  # - df_model: data.frame whose first column is the response vector (named "response") and the other columns are the classifiers (no NA allowed in the classifiers)
-# Outputs: 
-  # - [[1]] : optimum_primitives : vector of optimum primitives
-  # - [[2]] : optimum_ntrees : integer optimum ntree
-  # - [[3]] : optimum_mtry : integer optimum mtry
+# Info on the function : help(RunHRF)
+hie.RF <- HieRanFor::RunHRF(train.data = ground_truth_df_model,
+                    case.ID = "cat",
+                    exp.var = column_names_primitives,
+                    hie.levels = column_names_lc_classes_hierarchy,
+                    internal.end.path = TRUE)
+
+# Get and save the plot of the hierarchy between classes
+png(file.path(path_to_classification_folder,"classes_hierarchy.png"),width = 1000, height = 1000, units = "px" )
+plot(x = hie.RF, text.size = 9, split.text = 10)
+dev.off()
+
+# Plot of the variable importance. 
+Importance.hie.RF <- ImportanceHie(hie.RF = hie.RF, format.out = c("col.4.out"))
+
+Importance.hie.RF<-merge(Importance.hie.RF,df_primitives_types_sources,by.x="expl.var",by.y="column_names_primitives")
+
+Importance.hie.RF$type<-as.factor(Importance.hie.RF$type)
+Importance.hie.RF$source<-as.factor(Importance.hie.RF$source)
+Importance.hie.RF$stat<-as.factor(Importance.hie.RF$stat)
+Importance.hie.RF$indice<-as.factor(Importance.hie.RF$indice)
+
+PlotImportanceHie_v_taconet(input.data = Importance.hie.RF,
+                            X.data     = 2,
+                            Y.data     = 1,
+                            imp.data   = 4,
+                            explanatory.variable = 6,
+                            explanatory.variable.name = "source",
+                            plot.type  = "Bubble",
+                            supp.warn  = FALSE)
+
  
-get_optimum_rf_model<-function(model_df){
-  
-  cat("\nGetting the optimum primitives (x) (might be long)...\n")
-  
-  ## Define the control using a random forest selection function (functions=rfFuncs). 
-  # number: the number of folds to consider. we select the default values which is 10 folds
-  control <- caret::rfeControl(functions=rfFuncs, method="cv", number=10, returnResamp = "final")
-  ## Run the Recursive Feature Elimination algorithm
-  # sizes = a vector of integers corresponding to the number of features that should be retained in the updated model. Here we choose the number of primitives divided by 30
-  subsets <- seq(1,ncol(model_df)-1,round((ncol(model_df)-1)/30))
-  results <- caret::rfe(model_df[,2:ncol(model_df)], model_df[,1], sizes=subsets, rfeControl=control)
-  # to summarize the results : print(results) ; to list the chosen features : predictors(results) ; to plot the results : plot(results, type=c("g", "o"))
-  
-  optimum_primitives<-predictors(results)
-  
-  ground_truth_df_features_optimum_primitives<-model_df[,c("response",optimum_primitives)]
-  # Get optimum ntrees
-  cat("\nGetting the optimum number of trees, setting max to 500 (ntree)\n...")
-  model<-randomForest::randomForest(response ~ ., data=ground_truth_df_features_optimum_primitives, ntree=500,  na.action = na.omit)
-  # to print error OOB in function of the number of trees: plot(model$err.rate[, 1], type = "l", xlab = "nombre d'arbres", ylab = "erreur OOB")
-  optimum_ntrees<-which(model$err.rate[, 1]==min(model$err.rate[, 1]))[1]
-  # Get optimum mtry
-  cat("\nGetting the optimum number of variables randomly sampled as candidates at each split (mtry)...")
-  model_tuned<-randomForest::tuneRF(x=ground_truth_df_features_optimum_primitives[,predictors(results)],y=ground_truth_df_features_optimum_primitives$response,ntree=optimum_ntrees)
-  optimum_mtry<-as.numeric(model_tuned[,1][which(model_tuned[,2]==min(model_tuned[,2]))])
-  
-  return(list(optimum_primitives,optimum_ntrees,optimum_mtry))
-  
-}
-
-## Create the model with the optimum parameters
-model_param<-get_optimum_rf_model(ground_truth_df_model)
-ground_truth_df_model<-ground_truth_df_model[,c("response",model_param[[1]])]
-model<-randomForest::randomForest(response ~ ., data=ground_truth_df_model, ntree=model_param[[2]], mtry=model_param[[3]])
-
-# Retrieve the paths of the features to keep
-#columns_to_keep<-model_param[[1]]
-#paths<-left_join(data.frame(columns_to_keep),df_primitives_types_sources,by = c("columns_to_keep"="column_names_primitives"))
-#paths<-unique(data.frame(paths$indice,paths$indices_for_classif_paths))
-#paths_indices_to_compute<-paths[which(!is.na(paths$paths.indices_for_classif_paths)),]
-
 ########################################################################################################################
 ########################################################################################################################
 ############ Step 9 - Classify  ############
