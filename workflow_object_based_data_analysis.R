@@ -56,7 +56,7 @@
 ### Step 7 - Extract the zonal statistics (reflectance, spectral indices, textural indices, ancillary, shape, contextual)
   ## 7.1 - Extract zonal statistics for the ground truth dataset
   ## 7.2 - Extract zonal statistics for the segmented objects dataset
-### Step 8 - Classify : generate a set of random forest classifiers with a class hierarchy approach and classify the objects output of the segmentation process
+### Step 8 - Classify : generate a set of random forest classifiers using the training dataset with a class hierarchical structure approach, and classify the objects output of the segmentation process
   ## 8.1 - Generate the classifiers and extract information about the classification (confusion matrix, performance indices, plots of variables importance)
   ## 8.2 - Classify the objects output of the segmentation
 ### Step 9 - Post - process
