@@ -10,10 +10,11 @@
 
 
 # Local variable (to set by the user)
-kml_path="/home/ptaconet/Téléchargements/koumbia_2.kml"
-apiKey = scan("/home/ptaconet/react/r_bingmaps/bingAPIkey.txt",what="")
+kml_path="/home/ptaconet/Téléchargements/kml_bobo.kml"
+#apiKey = scan("/home/ptaconet/Documents/react/r_bingmaps/bingAPIkey.txt",what="")
+apiKey="Ajnm8OdGzh0hKLAPE-QoWRDyqjZlDxGb5EIQoOA7POkNJk_8h-YTQg89tcwkaeVD"
 imagerySet="Aerial"
-destFolder="/home/ptaconet/react/r_bingmaps"
+destFolder="/home/ptaconet/Documents/react/r_bingmaps"
 
 # Global variable (for the time being, can not be changed. Could be set to local in future dev)
 mapsize_width=1500  #max: 2000
@@ -38,16 +39,20 @@ if(!require(rgdal)){
 if(!require(gdalUtils)){
   install.packages("gdalUtils")
 }
+if(!require(raster)){
+  install.packages("raster")
+}
 
 require(sf)
 require(raster)
 require(rjson)
 require(rgdal)
 require(gdalUtils)
+require(raster)
 
-
-# Source useful function
-source("https://raw.githubusercontent.com/ptaconet/r_react/master/download_and_georeference_bingmaps_data.R")
+# Source useful functions
+source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/get_bingmaps_images/download_and_georeference_bingmaps_data.R")
+source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/mosaic_tif_images.R")
 
 # read kml as sf object
 kml_sf <- st_read(kml_path)
@@ -59,13 +64,12 @@ kml_sf <- st_transform(kml_sf,crs=epsg_utm)
 grid_10km=st_make_grid(kml_sf,what="polygons",cellsize = cell_size)
 
 # We convert the grid to geopackage and we save it
-st_write(st_transform(grid_10km,crs=4326),paste0(destFolder,"/koumbia_grid_10km.gpkg"))
+st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"bobo_grid_10km.gpkg"))
 
 # Loop on each 10km square tile
-for (i in 1:length(grid_10km)){
+for (i in 2:length(grid_10km)){
 
   
-  for (i in 1:2){
 cat(paste0("Creating 10 square kilometers grid n° ",i, " over ",length(grid_10km)))
   
 # We can download 1500 * 1500 pixels image from bing maps servers. We know that at zoom 19, 1 pixel=0.30m, so 1500 px = 450m. So within each 10km grid we make 400m grids (to be sure that all the area is encompassed)
