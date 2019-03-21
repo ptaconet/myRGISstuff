@@ -12,7 +12,7 @@
 # Local variable (to set by the user)
 kml_path="/home/ptaconet/Téléchargements/kml_bobo.kml"
 #apiKey = scan("/home/ptaconet/Documents/react/r_bingmaps/bingAPIkey.txt",what="")
-apiKey="Ajnm8OdGzh0hKLAPE-QoWRDyqjZlDxGb5EIQoOA7POkNJk_8h-YTQg89tcwkaeVD"
+apiKey="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 imagerySet="Aerial"
 destFolder="/home/ptaconet/Documents/react/r_bingmaps"
 
