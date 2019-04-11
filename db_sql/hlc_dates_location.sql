@@ -7,6 +7,10 @@
 -- nummission : campain number 
 -- codepays_fk : country identifier 
 
+-- author : Paul Taconet
+-- date : 2019-04-11
+-- db version : 5
+
 SELECT DISTINCT 
 datecapture,
 idpostedecapture,
