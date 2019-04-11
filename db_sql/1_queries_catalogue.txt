@@ -1,0 +1,2 @@
+hlc_dates : Get dates of human landing catch (HLC) and campain identifier for each country
+hlc_dates_position : Get dates and location (lat / lon) of human landing catch (HLC) and campain identifier for each country
