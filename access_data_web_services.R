@@ -24,20 +24,23 @@
 path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 path_to_database<-"/home/ptaconet/Bureau/react.db"  #<Data frame containing 
-epsg=32630
-modis_tile<-"h17v08" # For CIV. For BF : modis_tile<-"h17v07" 
+#epsg=32630
+#modis_tile<-"h17v08" # For CIV. For BF : modis_tile<-"h17v07" 
 url_query_hlc_dates_location<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
 
 ## Credential to the various servers where the source data are stored
-username_cophub<-"ptaconet" #<ESA Copernicus Scihub username>
-password_cophub<-"HHKcue51" #<ESA Copernicus Scihub password>
-username_USGS<-"ptaconet" #<USGS username>
-password_USGS<-"HHKcue51" #<USGS password>
+#username_cophub<-"ptaconet" #<ESA Copernicus Scihub username>
+#password_cophub<-"HHKcue51" #<ESA Copernicus Scihub password>
+#username_USGS<-"ptaconet" #<USGS username>
+#password_USGS<-"HHKcue51" #<USGS password>
 username_EarthData<-"ptaconet"  #<EarthData username>
 password_EarthData<-"HHKcue51"  #<EarthData password>
   
 
-
+## Set number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
+lag_days_modis_lst<-16
+lag_days_modis_veget<-20
+lag_days_gpm<-15
 
 ## Buffer size, within which the raster statistics will be computed (radius in meters)
 buffer_size=2000
@@ -48,7 +51,7 @@ buffer_size=2000
 ########################################################################################################################
 
 ### Call useful libraries
-library(getSpatialData)
+#library(getSpatialData)
 library(raster)
 library(sf)
 library(sp)
@@ -56,15 +59,30 @@ library(gdalUtils)
 library(rgdal)
 require(httr)
 require(RSQLite)
-#require(gapfill)
 require(dplyr)
 require(ncdf4)
 require(reticulate)
 require(lubridate)
+library(stringr)
+#library(MODIS)
+#library(MODISTools)
+#require(gapfill)
 ## Load packages for working on multi-core
-library(parallel)
-library(doParallel)
-library(foreach)
+#library(parallel)
+#library(doParallel)
+#library(foreach)
+
+########## Specific for ERA INTERIM (instructions to install the clients and use the python environment, more info here : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/#era-interim)
+##Set virtual env and install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client") #(from https://community.rstudio.com/t/problem-installing-python-libraries-with-reticulate-py-install-error-pip-not-found/26561/2)
+#system("virtualenv -p /usr/bin/python2 /home/ptaconet/.virtualenvs/py2-virtualenv")
+##Also works with this: virtualenv_create("py3-virtualenv", python = "/usr/bin/python3")
+#reticulate::use_virtualenv("py2-virtualenv")
+##install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client", envname = "py2-virtualenv")
+## For ERA-5 :
+#system("pip install cdsapi")
+
 
 ## Set working directory
 setwd(path_to_processing_folder)
@@ -85,24 +103,27 @@ path_to_gpm_processed_folder<-file.path(path_to_gpm_folder,"processed_data")
 path_to_erawind_folder<-file.path(path_to_processing_folder,"ERA_WIND")
 path_to_erawind_raw_folder<-file.path(path_to_erawind_folder,"raw_data")
 path_to_erawind_processed_folder<-file.path(path_to_erawind_folder,"processed_data")
+path_to_imcce_folder<-file.path(path_to_processing_folder,"IMCCE_Moon")
 
 ## Create the output folders
-directories<-list(path_to_sentinel1_products,path_to_sentinel1_raw_folder,path_to_sentinel1_processed_folder,path_to_modislst_folder,path_to_modislst_raw_folder,path_to_modislst_processed_folder,path_to_gpm_folder,path_to_gpm_raw_folder,path_to_gpm_processed_folder,path_to_erawind_folder,path_to_erawind_raw_folder,path_to_erawind_processed_folder,path_to_modisveget_folder,path_to_modisveget_raw_folder,path_to_modisveget_processed_folder)
+directories<-list(path_to_sentinel1_products,path_to_sentinel1_raw_folder,path_to_sentinel1_processed_folder,path_to_modislst_folder,path_to_modislst_raw_folder,path_to_modislst_processed_folder,path_to_gpm_folder,path_to_gpm_raw_folder,path_to_gpm_processed_folder,path_to_erawind_folder,path_to_erawind_raw_folder,path_to_erawind_processed_folder,path_to_modisveget_folder,path_to_modisveget_raw_folder,path_to_modisveget_processed_folder,path_to_imcce_folder)
 lapply(directories, dir.create)
 
 ## Set connections for getSpatialData
-getSpatialData::login_CopHub(username = username_cophub, password = password_cophub)
-getSpatialData::login_USGS(username = username_USGS, password = password_USGS)
+#getSpatialData::login_CopHub(username = username_cophub, password = password_cophub)
+#getSpatialData::login_USGS(username = username_USGS, password = password_USGS)
 
 ## Set urls to the various OpenDAP servers and connect
 url_gpm_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
 url_modis_opendap<-"https://opendap.cr.usgs.gov/opendap/hyrax"
+url_imcce_webservice<-"http://vo.imcce.fr/webservices/miriade/ephemcc_query.php?"
 modis_lst_terra_product<-"MOD11A1.006"
 modis_lst_aqua_product<-"MYD11A1.006"
 modis_veget_terra_product<-"MOD13Q1.006"
 modis_veget_aqua_product<-"MYD13Q1.006"
 modis_crs="+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs"
 
+## Connect to the EarthData servers
 httr::set_config(authenticate(user=username_EarthData, password=password_EarthData, type = "basic"))
 
 fun_get_opendap_index<-function(path_to_opendap_index){
@@ -121,11 +142,49 @@ fun_get_opendap_index<-function(path_to_opendap_index){
 fun_preprocess_modis_product<-function(path_to_raw_modis,var_name){
   grid_nc<-raster(path_to_raw_modis,varname=var_name)
   projection(grid_nc)<-"+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs"
-  #extent(grid_nc)[1:2]<-extent(grid_nc)[1:2]+res(grid_nc)[1]/2
-  #extent(grid_nc)[3:4]<-extent(grid_nc)[3:4]-res(grid_nc)[1]/2
+  extent(grid_nc)[1:2]<-extent(grid_nc)[1:2]+res(grid_nc)[1]/2
+  extent(grid_nc)[3:4]<-extent(grid_nc)[3:4]-res(grid_nc)[1]/2
   grid_nc <- projectRaster(grid_nc, crs = CRS(paste0("+init=epsg:",epsg)))
   return(grid_nc)
 }
+
+
+fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,roi_sp_utm,epsg,size_output_grid){
+  # Open netcdf
+  nc <- nc_open(path_to_output_erawind_data)
+  # Get lat and lon
+  lat <- ncvar_get(nc,'latitude')
+  lon <- ncvar_get(nc,'longitude')
+  # Get time 
+  #t <- ncvar_get(nc, "time")
+  #time unit: hours since 1900-01-01
+  #ncatt_get(nc,'time')
+  #convert the hours into date + hour
+  #as_datetime() function of the lubridate package needs seconds
+  #timestamp <- as_datetime(c(t*60*60),origin="1900-01-01")
+  
+  # Get the variable
+  variable <- ncvar_get(nc,variable_name)
+  
+  # Convert each layer to a raster
+  brick_era<-NULL
+  for (i in 1:dim(variable)[3]){
+    variable_rast <- raster(t(variable[,,i]), xmn=min(lon)-0.125, xmx=max(lon)+0.125, ymn=min(lat)-0.125, ymx=max(lat)+0.125, crs=CRS("+init=epsg:4326"))
+    variable_rast <- projectRaster(variable_rast, crs = CRS(paste0("+init=epsg:",epsg)))
+    # Resample to size_output_grid size 
+    #size_output_grid<-250
+    r<-variable_rast
+    res(r)<-c(size_output_grid,size_output_grid)
+    variable_rast_resamp<-resample(variable_rast,r,method='bilinear')
+    # Crop to ROI
+    variable_rast_resamp<-crop(variable_rast_resamp,roi_sp_utm)
+    # Add to brick
+    brick_era<-c(brick_era,variable_rast_resamp)
+  }
+  
+  return(brick_era)
+}
+
 
 # initiate cluster for paralell download 
 #no_cores <- detectCores() - 1
@@ -134,22 +193,58 @@ fun_preprocess_modis_product<-function(path_to_raw_modis,var_name){
 
 ## Set ROI as sf object
 roi_sf <- read_sf(path_to_roi_vector)$geometry
-set_aoi(roi_sf)
+#getSpatialData::set_aoi(roi_sf)
 
-## Set ROI as sp SpatialPolygon object
+## Set ROI as sp SpatialPolygon object in epsg 4326
 roi_sp_4326<-rgdal::readOGR(path_to_roi_vector)
-roi_sp_32630 <- spTransform(roi_sp, CRS(paste0("+init=epsg:",epsg)))
-roi_sp_modis_project <- spTransform(roi_sp, modis_crs)
 
-## Connect to DB
+## Get UTM WGS84 Zone. from https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
+cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
+utm_zone_number<-(floor((bbox(roi_sp_4326)[1,1] + 180)/6) %% 60) + 1
+if(bbox(roi_sp_4326)[2,1]>0){ # if latitudes are North
+  epsg<-as.numeric(paste0("326",utm_zone_number))
+} else { # if latitude are South
+  epsg<-as.numeric(paste0("325",utm_zone_number))
+}
+
+## Set ROI as sp SpatialPolygon object in UTM epsg and MODIS projection
+roi_sp_utm <- spTransform(roi_sp_4326, CRS(paste0("+init=epsg:",epsg)))
+roi_sp_modis_project <- spTransform(roi_sp_4326, modis_crs)
+
+## Get MODIS tile number(s) for the ROI
+if(!file.exists(file.path(path_to_processing_folder,"modis_sin.kmz"))){
+  download.file("https://modis.ornl.gov/files/modis_sin.kmz",destfile = file.path(path_to_processing_folder,"modis_sin.kmz"))
+}
+
+tiles = readOGR(file.path(path_to_processing_folder,"modis_sin.kmz"),"Features")
+coordinates = SpatialPoints(t(bbox(roi_sp_4326)), CRS('+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0'))
+modis_tile = as.character(raster::extract(tiles,coordinates)$Name)
+
+if(length(unique(modis_tile))>1){
+  cat("Your ROI is overlapping more than 1 MODIS tile. This workflow is currently not adapted for this case\n")
+} else {
+  modis_tile<-unique(modis_tile)
+  modis_tile=gsub(" ","",modis_tile)
+  modis_tile=gsub(":","",modis_tile)
+  for (i in 1:9){
+    modis_tile<-gsub(paste0("h",i,"v"),paste0("h0",i,"v"),modis_tile)
+  }
+  if(nchar(modis_tile)!=6){
+    modis_tile<-paste0(substr(modis_tile,1,4),"0",substr(modis_tile,5,5))
+  }
+}
+
+## Connect to project database
 react_db <- dbConnect(RSQLite::SQLite(),path_to_database)
 
-## Get query to retrieve dates and locations of human landing catches
+## Get query to retrieve dates and locations of human landing catches. The query is stored on my github repository
 sql_query_hlc_dates_location<-paste(readLines(url_query_hlc_dates_location), collapse="\n")
 
-## Get data frame of dates and locations of human landing catches
+## Execute query
 df_dates_locations_hlc<-dbGetQuery(react_db, sql_query_hlc_dates_location)
-## Turn to spatial dataset (sf and sp)
+## Filter data only for CIV
+df_dates_locations_hlc <- df_dates_locations_hlc %>% filter (codepays_fk=="CI")
+## Turn result from data.frame to spatial dataset (sf and sp)
 dates_locations_hlc_sf<-st_as_sf(df_dates_locations_hlc, coords = c("longitude", "latitude"), crs = 4326)
 dates_locations_hlc_sf<-st_transform(dates_locations_hlc_sf, crs = epsg)
 dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
@@ -159,53 +254,49 @@ dates_locations_hlc_sp<-spTransform(dates_locations_hlc_sp,CRS(paste0("+init=eps
 ## Get all dates
 all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
 
+
+
+
+
+
+
 ## For tests: retrieve all the lines for the first date
-i=1
+i=3
 locations_hlc_sp_this_date<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$datecapture==all_dates_hlc[i]),]
 this_date_hlc<-as.Date(all_dates_hlc[i])
 
-############# make menage file a geo dataset with positions #######
+## Set parameters for download of ERA INTERIM data
+#import the python library ecmwfapi
+#ecmwf <- reticulate::import('ecmwfapi')
+#for this step there must exist the file .ecmwfapirc
+#server = ecmwf$ECMWFDataServer() #start the connection
 
-## Set date 
-#date_epidemio_campain <- "2016-01-20"  # Date d'une capture au village DON au BF
+## Set parameters for download of ERA 5 data
+#import python CDS-API
+cdsapi <- reticulate::import('cdsapi')
+#for this step there must exist the file .cdsapirc
+server = cdsapi$Client() #start the connection
 
-#menages_csv<-read.csv(path_to_file_coord_menages)
-#menages_csv<-menages_csv %>% filter (!(is.na(Part12Part2coordgpsLatitude))) %>% filter (!(is.na(Part12Part2coordgpsLongitude)))
-
-#menages_sf<-st_as_sf(menages_csv, coords = c("Part12Part2coordgpsLongitude", "Part12Part2coordgpsLatitude"), crs = 4326)
-#menages_sf<-st_transform(menages_sf, crs = 32630)
-
-#menages_sp_4326<-SpatialPointsDataFrame(coords=data.frame(menages_csv$Part12Part2coordgpsLongitude,menages_csv$Part12Part2coordgpsLatitude),data=menages_csv,proj4string=CRS("+init=epsg:4326"))
-#menages_sp<-spTransform(menages_sp,CRS("+init=epsg:32630"))
-
-## Create 2 km buffer around the points
-#buffer_2km <- st_buffer(menages_sf,2000) 
-#buffer_2km<-st_union(buffer_2km,by_feature = TRUE)
-
-## Get couple {date,coord}
-#dates_loc_enquetes<-unique(menages_sf[c("dateenq", "geometry")])
-
-
-########################################################################################################################
-############ Start Workflow ############
-########################################################################################################################
-cat("Starting workflow")
-
-
-########################################################################################################################
 ############ Download and prepare OpenDap time and spatial indexes to further download the MODIS and GPM datasets on opendap servers ############
-########################################################################################################################
 
 url_opendap_modis_lst_terra<-paste0(url_modis_opendap,"/",modis_lst_terra_product,"/",modis_tile)
 url_opendap_modis_lst_aqua<-paste0(url_modis_opendap,"/",modis_lst_aqua_product,"/",modis_tile)
 url_opendap_modis_veget_terra<-paste0(url_modis_opendap,"/",modis_veget_terra_product,"/",modis_tile)
 url_opendap_modis_veget_aqua<-paste0(url_modis_opendap,"/",modis_veget_aqua_product,"/",modis_tile)
 
-## Downlaad the time indexes on opendap for each opendap poduct
-httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?time"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_terra_time_index.txt")))
-httr::GET(paste0(url_opendap_modis_lst_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_aqua_time_index.txt")))
-httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?time"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_terra_time_index.txt")))
-httr::GET(paste0(url_opendap_modis_veget_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_aqua_time_index.txt")))
+## Download the time indexes on opendap for each opendap poduct
+if (!(file.exists(file.path(path_to_modislst_folder,"opendap_modis_lst_terra_time_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?time"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_terra_time_index.txt")))
+}
+if (!(file.exists(file.path(path_to_modislst_folder,"opendap_modis_lst_aqua_time_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_lst_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_aqua_time_index.txt")))
+}
+if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_terra_time_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?time"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_terra_time_index.txt")))
+}
+if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_aqua_time_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_veget_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_aqua_time_index.txt")))
+}
 
 ## Get the time indexes as vectors
 opendap_modis_lst_terra_time_index<-fun_get_opendap_index(file.path(path_to_modislst_folder,"opendap_modis_lst_terra_time_index.txt"))
@@ -215,15 +306,24 @@ opendap_modis_veget_aqua_time_index<-fun_get_opendap_index(file.path(path_to_mod
 
 
 ## Downlaad the spatial indexes on opendap for each opendap poduct
-httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?XDim"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_XDim_index.txt")))
-httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_YDim_index.txt")))
-
-httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?XDim"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_XDim_index.txt")))
-httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_YDim_index.txt")))
-
-httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt")))
-httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt")))
-
+if (!(file.exists(file.path(path_to_modislst_folder,"opendap_modis_lst_XDim_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?XDim"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_XDim_index.txt")))
+}
+if (!(file.exists(file.path(path_to_modislst_folder,"opendap_modis_lst_YDim_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_lst_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modislst_folder,"opendap_modis_lst_YDim_index.txt")))
+}    
+if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_XDim_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?XDim"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_XDim_index.txt")))
+}   
+if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_YDim_index.txt")))){
+  httr::GET(paste0(url_opendap_modis_veget_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_YDim_index.txt")))
+}   
+if (!(file.exists(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt")))){
+  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt")))
+}   
+if (!(file.exists(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt")))){
+  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt")))
+}
 
 ## Get the spatial indexes as vectors
 opendap_modis_lst_XDim_index<-fun_get_opendap_index(file.path(path_to_modislst_folder,"opendap_modis_lst_XDim_index.txt"))
@@ -239,10 +339,10 @@ opendap_gpm_lat_index<-fun_get_opendap_index(file.path(path_to_gpm_folder,"opend
 roi_bbox_4326<-bbox(roi_sp_4326) ## for MODIS 
 roi_bbox_modisproject<-bbox(roi_sp_modis_project) # for GPM
 
-index_opendap_gpm_lon_min<-which.min(abs(opendap_gpm_lon_index-roi_bbox_4326[1,1]))-1
-index_opendap_gpm_lon_max<-which.min(abs(opendap_gpm_lon_index-roi_bbox_4326[1,2]))-1 
-index_opendap_gpm_lat_min<-which.min(abs(opendap_gpm_lat_index-roi_bbox_4326[2,1]))-1
-index_opendap_gpm_lat_max<-which.min(abs(opendap_gpm_lat_index-roi_bbox_4326[2,2]))-1 
+index_opendap_gpm_lon_min<-which.min(abs(opendap_gpm_lon_index-roi_bbox_4326[1,1]))-4
+index_opendap_gpm_lon_max<-which.min(abs(opendap_gpm_lon_index-roi_bbox_4326[1,2]))+4 
+index_opendap_gpm_lat_min<-which.min(abs(opendap_gpm_lat_index-roi_bbox_4326[2,1]))-4
+index_opendap_gpm_lat_max<-which.min(abs(opendap_gpm_lat_index-roi_bbox_4326[2,2]))+4 
 
 index_opendap_modisveget_lon_min<-which.min(abs(opendap_modis_veget_XDim_index-roi_bbox_modisproject[1,1]))-1
 index_opendap_modisveget_lon_max<-which.min(abs(opendap_modis_veget_XDim_index-roi_bbox_modisproject[1,2]))-1 
@@ -279,16 +379,25 @@ index_opendap_modislst_lat_min<-which.min(abs(opendap_modis_lst_YDim_index-roi_b
 #  index_opendap_modislst_lon_max<-
 #  index_opendap_modislst_lat_max<-
 #  index_opendap_modislst_lat_min<-
-  
-  # For BF
-  #modis_tile<-"h17v07"
-  #index_opendap_modisveget_lon_min<-3080
-  #index_opendap_modisveget_lon_max<-3335
-  #index_opendap_modisveget_lat_max<-4530
-  #index_opendap_modisveget_lat_min<-4300
-  
+
+# For BF
+#modis_tile<-"h17v07"
+#index_opendap_modisveget_lon_min<-3080
+#index_opendap_modisveget_lon_max<-3335
+#index_opendap_modisveget_lat_max<-4530
+#index_opendap_modisveget_lat_min<-4300
+
+
+
+
+########################################################################################################################
+############ Start Workflow ############
+########################################################################################################################
+cat("Starting workflow")
+
+
 #####################################
-########### Modis LST ###############
+########### 1. Modis LST ###############
 #####################################
 
 # Il y a deux résolutions temporelles disponibles: 1 jour et 8 jours. Pour chaque résolution temporelle il y a 2 fichiers disponibles: le fichier issu de Terra et le fichier issu de Aqua (relevés distants d'à peu près 2/3 h entre Terra et Aqua). Enfin pour chaque fichier il y a 2 relevés: température diurne et température nocturne. La différence entre Terra et Aqua est l'heure de relevé, ainsi que l'étendue des données disponibles (ie couverture nuageuse au moment de l'acquisition)
@@ -311,16 +420,28 @@ index_opendap_modislst_lat_min<-which.min(abs(opendap_modis_lst_YDim_index-roi_b
 # Apart from the GetSpatialData library, another option is to access MODIS data via OpenDAP. All the collections are available here:
 # For instance for MOD11A1 v6 : https://opendap.cr.usgs.gov/opendap/hyrax/MYD11A1.006/contents.html
 # Then we need to select the MODIS tile for our ROI. For instance for CIV the tile is h17v08, hence our data is: https://opendap.cr.usgs.gov/opendap/hyrax/MYD11A1.006/h17v08.ncml.html
+
+
+
+
+
+## Thèse Nico :
+# - 7 jours. Il prend les données de la semaine de capture + 2 semaines précédentes. 
+# - stage Mader : moyenne sur les 7 jours aussi
+# - Weiss et al : 1 month
+
+
 ##############################################################
-#### 2.1 - Download data ####
+#### 1.1 - Download the data ####
 ##############################################################
 
-time_range<-as.character(c(this_date_hlc-16,this_date_hlc))
+time_range<-as.character(c(this_date_hlc-lag_days_modis_lst,this_date_hlc))
 dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
 
-fun_build_modis_lst_opendap_url<-function(date_hlc,satellite){
+# Function to build the OpenDap URL to dowload MODIS LST night and day 1km data. input parameters : date and satellite (terra or aqua)
+fun_build_modis_lst_opendap_url<-function(date_catch,satellite){
   
-  index_date<-as.integer(difftime(date_hlc ,"2000-01-01" , units = c("days"))) # time is provided as number of days since 2000-01-01
+  index_date<-as.integer(difftime(date_catch ,"2000-01-01" , units = c("days"))) # time is provided as number of days since 2000-01-01
   
   if (satellite=="terra"){
     vector_time_index<-opendap_modis_lst_terra_time_index
@@ -340,12 +461,14 @@ fun_build_modis_lst_opendap_url<-function(date_hlc,satellite){
 
 ## Download the data 
 for (i in 1:length(dates)){
-  cat(paste0("Downloadind MODIS LST Terra and Aqua (MOD11A1 and MYD11A1) for the ROI and for date ",dates[i],"\n"))
+  cat(paste0("Downloading MODIS LST Terra and Aqua (MOD11A1 and MYD11A1) for the ROI and for date ",dates[i],"\n"))
   for (j in c("terra","aqua")){
     opendap_modis<-fun_build_modis_lst_opendap_url(dates[i],j)
     path_to_dataset<-file.path(path_to_modislst_raw_folder,paste0(gsub("-","",dates[i]),"_",j,".nc4"))
     if (!(file.exists(path_to_dataset))){
       httr::GET(opendap_modis,write_disk(path_to_dataset))
+    } else {
+      cat(paste0("Data already exist for date ",dates[i],"\n"))
     }
   }
 }
@@ -353,7 +476,7 @@ for (i in 1:length(dates)){
 
 
 ##############################################################
-#### 2.2 - Prepare data ####
+#### 1.2 - Prepare the data ####
 ##############################################################
 
 ## For each date before the d date:
@@ -371,8 +494,8 @@ aqua_names<-file.path(path_to_modislst_raw_folder,paste0(gsub("-","",dates),"_aq
 
 dates<-rev(dates)
 
-list_lst_day<-list()
-list_lst_nigth<-list()
+brick_lst_day<-NULL
+brick_lst_night<-NULL
 
 for (i in 1:length(dates)){
 
@@ -384,8 +507,8 @@ rast_lst_day_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Day_1km")
 rast_lst_day<-brick(rast_lst_day_terra,rast_lst_day_aqua)
 
 rast_max_lst_day<-max(rast_lst_day,na.rm=TRUE)
-list_lst_day[[length(list_lst_day)+1]]<-rast_max_lst_day
-names(list_lst_day[[length(list_lst_day)]])<-paste0("lst_max_d_",i)
+brick_lst_day<-c(brick_lst_day,rast_max_lst_day)
+names(brick_lst_day[[length(brick_lst_day)]])<-paste0("lst_max_",i-1)
 
 # Create raster of LST_night minimum value combining Terra and Aqua by taking the minimum available value for each pixel
 rast_lst_night_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Night_1km")
@@ -393,25 +516,25 @@ rast_lst_night_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Night_1km")
 rast_lst_night<-brick(rast_lst_night_terra,rast_lst_night_aqua)
 
 rast_min_lst_night<-min(rast_lst_night,na.rm=TRUE)
-list_lst_nigth[[length(list_lst_nigth)+1]]<-rast_min_lst_night
-names(list_lst_nigth[[length(list_lst_nigth)]])<-paste0("lst_min_d_",i)
+brick_lst_night<-c(brick_lst_night,rast_min_lst_night)
+names(brick_lst_night[[length(brick_lst_night)]])<-paste0("lst_min_",i-1)
 
 }
 
-
-lst_day<-brick(list_lst_day)
-lst_night<-brick(list_lst_nigth)
+brick_lst_day<-brick(brick_lst_day)
+brick_lst_night<-brick(brick_lst_night)
 
 ## Extract mean of LST in a buffer of 2 km for all the dates
 # na.rm = TRUE means that NA values in the raster are not taken into account
 # small=TRUE means that each time the buffer intersects a non NA cell it takes into account the cell value
-ex <- raster::extract(lst_day, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-ex <- raster::extract(lst_night, ex, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+# sp=TRUE means that the extracted values are added to the data.frame of the Spatial object
+locations_hlc_sp_this_date <- raster::extract(brick_lst_day, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- raster::extract(brick_lst_night, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
 
 
 #####################################
-########### Modis NDVI and EVI ###############
+########### 2. Modis vegetation indices NDVI and EVI ###############
 #####################################
 
 ## Modis NDVI and EVI are 250 m / 16 days resolutions. We take the data 
@@ -429,14 +552,15 @@ ex <- raster::extract(lst_night, ex, buffer=buffer_size,fun=mean, na.rm=TRUE, sp
 # - we download the data using the indexes of the lat and lon coordinates provided as parameters
 
 
-time_range<-as.character(c(this_date_hlc-20,this_date_hlc+8))
+##############################################################
+#### 2.1 - Download the data ####
+##############################################################
+
+time_range<-as.character(c(this_date_hlc-lag_days_modis_veget,this_date_hlc+8))
 dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
 
-#records_terra <- getMODIS_query(time_range = time_range, name = "MODIS_MOD13Q1_V6")
-#records_aqua <- getMODIS_query(time_range = time_range, name = "MODIS_MYD13Q1_V6")
-#records<-rbind(records_terra,records_aqua)
-
 ## Retrieve date and satellite of the week including the catch (i.e. closest start aquisition date from the catch date) and build the link to download the data
+# Function to build the OpenDap URL to dowload MODIS Vegetion indices NDVI and EVI 250m data. input parameters : date
 
 fun_build_modis_veget_opendap_url<-function(date_catch){
   
@@ -445,15 +569,23 @@ fun_build_modis_veget_opendap_url<-function(date_catch){
   index_opendap_terra_closest_to_date<-which.min(abs(opendap_modis_veget_terra_time_index-date_catch_julian))
   index_opendap_aqua_closest_to_date<-which.min(abs(opendap_modis_veget_aqua_time_index-date_catch_julian))
   
-  days_sep_terra_from_date<-abs(opendap_modis_veget_terra_time_index[index_opendap_terra_closest_to_date]-date_catch_julian)
-  days_sep_aqua_from_date<-abs(opendap_modis_veget_aqua_time_index[index_opendap_aqua_closest_to_date]-date_catch_julian)
+  days_sep_terra_from_date<-opendap_modis_veget_terra_time_index[index_opendap_terra_closest_to_date]-date_catch_julian
+  days_sep_aqua_from_date<-opendap_modis_veget_aqua_time_index[index_opendap_aqua_closest_to_date]-date_catch_julian
   
-  if(days_sep_terra_from_date<days_sep_aqua_from_date){
+  if(days_sep_terra_from_date<0 & days_sep_aqua_from_date>0){
     opendap_collection_closest_date_to_catch<-"MOD13Q1.006"
     opendap_index_closest_date_to_catch<-index_opendap_terra_closest_to_date-1
-  } else {
+  } else if (days_sep_terra_from_date>0 & days_sep_aqua_from_date<0){
     opendap_collection_closest_date_to_catch<-"MYD13Q1.006"
     opendap_index_closest_date_to_catch<-index_opendap_aqua_closest_to_date-1
+  } else {
+   if(abs(days_sep_terra_from_date)<abs(days_sep_aqua_from_date)){
+      opendap_collection_closest_date_to_catch<-"MOD13Q1.006"
+      opendap_index_closest_date_to_catch<-index_opendap_terra_closest_to_date-1
+   } else {
+      opendap_collection_closest_date_to_catch<-"MYD13Q1.006"
+      opendap_index_closest_date_to_catch<-index_opendap_aqua_closest_to_date-1
+   }
   }
   
   url_opendap<-paste0(url_modis_opendap,"/",opendap_collection_closest_date_to_catch,"/",modis_tile,".ncml.nc4?MODIS_Grid_16DAY_250m_500m_VI_eos_cf_projection,_250m_16_days_NDVI[",opendap_index_closest_date_to_catch,"][",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"][",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],time[",opendap_index_closest_date_to_catch,"],YDim[",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"],XDim[",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],_250m_16_days_EVI[",opendap_index_closest_date_to_catch,"][",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"][",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],time[",opendap_index_closest_date_to_catch,"],YDim[",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"],XDim[",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"]")
@@ -462,79 +594,67 @@ fun_build_modis_veget_opendap_url<-function(date_catch){
   
 }
 
+## Download data
 
-#time_range<-as.character(c(this_date_hlc-20,this_date_hlc+8))
-#records_terra <- getMODIS_query(time_range = time_range, name = "MODIS_MOD13Q1_V6")
-#records_aqua <- getMODIS_query(time_range = time_range, name = "MODIS_MYD13Q1_V6")
-#records<-rbind(records_terra,records_aqua)
+date_modis_veget<-c(this_date_hlc,this_date_hlc-8,this_date_hlc-16)
 
+modisveget_list_paths<-NULL
+modisveget_list_names<-NULL
 
-#fun_build_modis_veget_opendap_url<-function(date_catch,records){
+for (i in 1:length(date_modis_veget)){
+  cat(paste0("Downloading MODIS Vegetation indices data for the ROI and for date ",date_modis_veget[i],"\n"))
+  urls_infos<-fun_build_modis_veget_opendap_url(date_modis_veget[i])
+  path<-file.path(path_to_modisveget_raw_folder,paste0(urls_infos[[2]],"_",urls_infos[[3]],".nc4"))
+  modisveget_list_paths<-c(modisveget_list_paths,path)
+  modisveget_list_names<-c(modisveget_list_names,as.character(abs(difftime(date_modis_veget[i] ,this_date_hlc , units = c("days")))))
+  if (!(file.exists(path))){
+    httr::GET(url = urls_infos[[1]], write_disk(path))
+  } else {
+    cat(paste0("Data already exist for date ",date_modis_veget[i],"\n"))
+  }
+}
 
-#index_closest_date_to_catch<-which(abs(as.Date(records$acquisitionDate)-this_date_hlc) == min(abs(as.Date(records$acquisitionDate) - this_date_hlc)))
-#closest_date_to_catch<-min(records$acquisitionDate[index_closest_date_to_catch])
-#sat_closest_date_to_catch<-records$product[which(records$acquisitionDate==closest_date_to_catch)]
+#catch_week<-fun_build_modis_veget_opendap_url(this_date_hlc)
+#one_week_before<-fun_build_modis_veget_opendap_url(this_date_hlc-8)
+#two_week_before<-fun_build_modis_veget_opendap_url(this_date_hlc-16)
 
-#opendap_index_closest_date_to_catch<-as.integer(difftime(closest_date_to_catch ,"2000-01-01" , units = c("days")))
-#opendap_index_closest_date_to_catch<-trunc(opendap_index_closest_date_to_catch/16)
+#path_catch_week<-file.path(path_to_modisveget_raw_folder,paste0(catch_week[[2]],"_",catch_week[[3]],".nc4"))
+#path_one_week_before<-file.path(path_to_modisveget_raw_folder,paste0(one_week_before[[2]],"_",one_week_before[[3]],".nc4"))
+#path_two_week_before<-file.path(path_to_modisveget_raw_folder,paste0(two_week_before[[2]],"_",two_week_before[[3]],".nc4"))
 
-#if (grepl("MOD13Q1",sat_closest_date_to_catch)){
-#  opendap_collection_closest_date_to_catch<-"MOD13Q1.006"
-#} else {
-#  opendap_collection_closest_date_to_catch<-"MYD13Q1.006"
+#if (!(file.exists(path_catch_week))){
+#  httr::GET(url = catch_week[[1]], write_disk(path_catch_week))
+#}
+#if (!(file.exists(path_one_week_before))){
+#  httr::GET(url = one_week_before[[1]], write_disk(path_one_week_before))
+#}
+#if (!(file.exists(path_two_week_before))){
+#  httr::GET(url = two_week_before[[1]], write_disk(path_two_week_before))
 #}
 
-#url_opendap<-paste0(url_modis_opendap,opendap_collection_closest_date_to_catch,"/",modis_tile,".ncml.nc4?MODIS_Grid_16DAY_250m_500m_VI_eos_cf_projection,_250m_16_days_NDVI[",opendap_index_closest_date_to_catch,"][",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"][",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],time[",opendap_index_closest_date_to_catch,"],YDim[",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"],XDim[",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],_250m_16_days_EVI[",opendap_index_closest_date_to_catch,"][",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"][",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"],time[",opendap_index_closest_date_to_catch,"],YDim[",index_opendap_modisveget_lat_min,":",index_opendap_modisveget_lat_max,"],XDim[",index_opendap_modisveget_lon_min,":",index_opendap_modisveget_lon_max,"]")
 
-#return(list(url_opendap,opendap_collection_closest_date_to_catch,opendap_index_closest_date_to_catch))
+##############################################################
+#### 2.2 - Prepare the data ####
+##############################################################
 
-#}
-
-
-catch_week<-fun_build_modis_veget_opendap_url(this_date_hlc,records)
-one_week_before<-fun_build_modis_veget_opendap_url(as.character(this_date_hlc-8),records)
-two_week_before<-fun_build_modis_veget_opendap_url(as.character(this_date_hlc-16),records)
-
-path_catch_week<-file.path(path_to_modisveget_raw_folder,paste0(catch_week[[2]],"_",catch_week[[3]],".nc4"))
-path_one_week_before<-file.path(path_to_modisveget_raw_folder,paste0(one_week_before[[2]],"_",one_week_before[[3]],".nc4"))
-path_two_week_before<-file.path(path_to_modisveget_raw_folder,paste0(two_week_before[[2]],"_",two_week_before[[3]],".nc4"))
-
-if (!(file.exists(path_catch_week))){
-  httr::GET(url = catch_week[[1]], write_disk(path_catch_week))
-}
-if (!(file.exists(path_one_week_before))){
-  httr::GET(url = one_week_before[[1]], write_disk(path_one_week_before))
-}
-if (!(file.exists(path_two_week_before))){
-  httr::GET(url = two_week_before[[1]], write_disk(path_two_week_before))
+brick_modisveget<-NULL
+for (i in 1:length(modisveget_list_paths)){
+  rast_catch_ndvi<-fun_preprocess_modis_product(modisveget_list_paths[i],"_250m_16_days_NDVI")
+  rast_catch_evi<-fun_preprocess_modis_product(modisveget_list_paths[i],"_250m_16_days_EVI")
+  brick_modisveget<-c(brick_modisveget,rast_catch_ndvi)
+  names(brick_modisveget[[length(brick_modisveget)]])<-paste0("ndvi_",modisveget_list_names[i])
+  brick_modisveget<-c(brick_modisveget,rast_catch_evi)
+  names(brick_modisveget[[length(brick_modisveget)]])<-paste0("evi_",modisveget_list_names[i])
 }
 
+brick_modisveget<-brick(brick_modisveget)
 
-
-
-rast_catch_week_ndvi<-fun_preprocess_modis_vegetation(path_catch_week,"_250m_16_days_NDVI")
-rast_catch_week_evi<-fun_preprocess_modis_vegetation(path_catch_week,"_250m_16_days_EVI")
-
-rast_catch_one_week_before_ndvi<-fun_preprocess_modis_vegetation(path_one_week_before,"_250m_16_days_NDVI")
-rast_catch_one_week_before_evi<-fun_preprocess_modis_vegetation(path_one_week_before,"_250m_16_days_EVI")
-
-rast_catch_two_week_before_ndvi<-fun_preprocess_modis_vegetation(path_two_week_before,"_250m_16_days_NDVI")
-rast_catch_two_week_before_evi<-fun_preprocess_modis_vegetation(path_two_week_before,"_250m_16_days_EVI")
-
-
-#grid_nc <- projectRaster(grid_nc, crs = CRS(paste0("+init=epsg:",epsg)))
-
-#writeRaster(grid_nc,"/home/ptaconet/Bureau/test4.tif",overwrite=TRUE)
-
-
-
-
-#datasets <- getMODIS_data(records = records[1,],dir_out=path_to_modisveget_raw_folder, force=FALSE) 
-
+# Extract mean of vegetation indices for each raster 
+locations_hlc_sp_this_date <- raster::extract(brick_modisveget, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
 
 #####################################
-########### GPM ###############
+########### 3. GPM ###############
 #####################################
 
 ## Websites
@@ -550,32 +670,55 @@ rast_catch_two_week_before_evi<-fun_preprocess_modis_vegetation(path_two_week_be
 ## Earthdata: 
 # How to Download Data Files from HTTPS Service with wget: https://disc.gsfc.nasa.gov/information/howto?title=How%20to%20Download%20Data%20Files%20from%20HTTPS%20Service%20with%20wget
 
+# from https://wiki.earthdata.nasa.gov/display/EL/How+to+access+data+with+R
 
 # The GPM data at 1°/1 day resolution are available :
 # through OpenDAP protocol here (ability to subset the dataset on our bounding box before downloading it): https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.05
 # through standard http protocol here (impossible to subset the dataset, ie must download the whole dataset (approx. 20 mb / dataset)): https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/GPM_3IMERGDF.05
 
+## Exhaustive info and links on the GPM product (including citation): https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGDF_V06/summary?keywords=3imergdf
+##############################################################
+#### 3.1 - Download the data ####
+##############################################################
 
 # We retrieve the data 15 days before the date_epidemio_campain (source of the duration: thèse Nico)
 
-time_range<-as.character(c(this_date_hlc-15,this_date_hlc))
+time_range<-as.character(c(this_date_hlc-lag_days_gpm,this_date_hlc))
 dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
 
+# Function to build the OpenDap URL to dowload GPM 1km data. input parameters : date
+
+fun_build_gpm_opendap_url<-function(date_catch){
+  
+  year<-format(date_catch,'%Y')
+  month<-format(date_catch,'%m')
+  product_name<-paste0("3B-DAY.MS.MRG.3IMERG.",gsub("-","",date_catch),"-S000000-E235959.V06.nc4.nc4")
+  
+  # We use the precipitationCal variable, as explained in the technical doc (https://pps.gsfc.nasa.gov/Documents/IMERG_doc_190313.pdf , p.39) : Note  well  that  HQprecipitation only includes  microwave  data  (hence  “HQ”),  meaning  it  has significant gaps.  precipitationCal is the complete estimate that most users will want to access
+  url_product<-paste0(url_gpm_opendap,"/",year,"/",month,"/",product_name,"?precipitationCal[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
+  
+  return(url_product)
+}
+
+## Download the data
+
+gpm_list_paths<-NULL
+#gpm_list_names<-NULL
+
+dates<-rev(dates)
 
 for (i in 1:length(dates)){
-  cat(paste0("Downloadind GPM data for the ROI and for date ",dates[i],"\n"))
+  cat(paste0("Downloading GPM data for the ROI and for date ",dates[i],"\n"))
   # build the url of the dataset
-  year<-format(dates[i],'%Y')
-  month<-format(dates[i],'%m')
-  product_name<-paste0("3B-DAY.MS.MRG.3IMERG.",gsub("-","",dates[i]),"-S000000-E235959.V06.nc4.nc4")
-
-  url_product<-paste0(url_gpm_opendap,"/",year,"/",month,"/",product_name,"?HQprecipitation[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
-
+  url_opendap<-fun_build_gpm_opendap_url(dates[i])
   # Download the data
-  # from https://wiki.earthdata.nasa.gov/display/EL/How+to+access+data+with+R
   path_to_output_gpm_data<-file.path(path_to_gpm_raw_folder,paste0(gsub("-","",dates[i]),".nc4"))
+  gpm_list_paths<-c(gpm_list_paths,path_to_output_gpm_data)
+  #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(dates[i] ,this_date_hlc , units = c("days"))))))
   if (!(file.exists(path_to_output_gpm_data))){
-    httr::GET(url = url_product, write_disk(path_to_output_gpm_data))
+    httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
+  } else {
+    cat(paste0("Data is already existing for date ",dates[i],"\n"))
   }
 }
 
@@ -597,66 +740,209 @@ for (i in 1:length(dates)){
 
 # Open GPM data as raster and pre-process
 
-grid_nc<-raster(path_to_output_gpm_data)
-projection(grid_nc)<-CRS("+init=epsg:4326")
-grid_nc <- t(grid_nc)
-grid_nc <- flip(grid_nc,'y')
-grid_nc <- flip(grid_nc,'x')
-grid_nc <- projectRaster(grid_nc, crs = CRS(paste0("+init=epsg:",epsg)))
+
+##############################################################
+#### 3.2 - Prepare the data ####
+##############################################################
+
+brick_gpm<-NULL
+brick_gpm_positive_precip<-NULL
+
+
+for (i in 1:length(gpm_list_paths)){
+  
+  gpm_rast<-raster(gpm_list_paths[i])
+  projection(gpm_rast)<-CRS("+init=epsg:4326")
+  # The raster has to be flipped. Output was validated with the data from 2017-09-20 (see https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/browse/GPM_3IMERGDF.png)
+  gpm_rast <- t(gpm_rast)
+  gpm_rast <- flip(gpm_rast,'y')
+  gpm_rast <- flip(gpm_rast,'x')
+  gpm_rast <- projectRaster(gpm_rast, crs = CRS(paste0("+init=epsg:",epsg)))
+
+  ### Interpolate 
+  size_output_grid<-250
+  r<-gpm_rast
+  res(r)<-c(size_output_grid,size_output_grid)
+  
+  ## Using Inverse distance weighting. More info : https://pro.arcgis.com/fr/pro-app/help/analysis/geostatistical-analyst/how-inverse-distance-weighted-interpolation-works.htm
+  #grd <- as(r, 'SpatialGrid')
+  #P<-rasterToPoints(gpm_rast, spatial = TRUE)
+  # Interpolate the grid cells using a power value of 2 (idp=2.0). 
+  #P.idw <- gstat::idw(P$layer ~ 1, P, newdata=grd, idp=2.0)
+  # Convert to raster object
+  #gpm_rast_resample_idw <- raster(P.idw)
+  
+  ## Using resample (bilinear resampling, cf. http://desktop.arcgis.com/fr/arcmap/latest/extensions/spatial-analyst/performing-analysis/cell-size-and-resampling-in-analysis.htm)
+  gpm_rast<-resample(gpm_rast,r,method='bilinear')
+  
+  brick_gpm<-c(brick_gpm,gpm_rast)
+  #names(brick_gpm[[length(brick_gpm)]])<-gpm_list_names[i]
+  
+  gpm_positive_precip_rast<-gpm_rast
+  gpm_positive_precip_rast[gpm_positive_precip_rast > 0] <- 1
+  gpm_positive_precip_rast[gpm_positive_precip_rast <= 0] <- 0
+  brick_gpm_positive_precip<-c(brick_gpm_positive_precip,gpm_positive_precip_rast)
+}
+
+brick_gpm<-brick(brick_gpm)
+
+## Sum of the precipitations for the 15 days
+precip_sum<-sum(brick_gpm,na.rm = T)
+names(precip_sum)<-"precip_sum"
+## Precipitation for the date of HLC
+precip_0<-brick_gpm[[1]]
+names(precip_0)<-"precip_0"
+## Number of days with precipitations during the 15 days before the HLC
+precip_ndays<-sum(brick(brick_gpm_positive_precip),na.rm = T)
+names(precip_ndays)<-"precip_ndays"
+
+# Extract mean of GPM for each raster
+locations_hlc_sp_this_date <- raster::extract(precip_sum, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- raster::extract(precip_0, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- raster::extract(precip_ndays, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
 
 #####################################
-########### Wind (ERA) ###############
+########### 4. Wind (ERA) ###############
 #####################################
-# Check :
-# https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/
+# Check : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/
 
-### Initialisation
-# Set virtual env and install the python ECMWF API
-reticulate::py_install("ecmwf-api-client") #(from https://community.rstudio.com/t/problem-installing-python-libraries-with-reticulate-py-install-error-pip-not-found/26561/2)
-system("virtualenv -p /usr/bin/python2 /home/ptaconet/.virtualenvs/py2-virtualenv")
-# Also works with this
-#virtualenv_create("py3-virtualenv", python = "/usr/bin/python3")
-reticulate::use_virtualenv("py2-virtualenv")
-# install the python ECMWF API
-reticulate::py_install("ecmwf-api-client", envname = "py2-virtualenv")
+# ERA 5 : https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview
 
-#import the python library ecmwfapi
-ecmwf <- import::import('ecmwfapi')
+# Description of the wind data: https://apps.ecmwf.int/codes/grib/param-db?id=165 and https://apps.ecmwf.int/codes/grib/param-db?id=166
 
-#for this step there must exist the file .ecmwfapirc
-server = ecmwf$ECMWFDataServer() #start the connection
+##############################################################
+#### 4.1 - Download the data ####
+##############################################################
 
-bbox_4326<-bbox(menages_sp_4326)
+bbox_4326<-bbox(spTransform(dates_locations_hlc_sp,CRS("+init=epsg:4326")))
 # extend a bit the size of the bbox
 bbox_4326[,1]=bbox_4326[,1]-1
 bbox_4326[,2]=bbox_4326[,2]+1
 
+path_to_output_erawind_data_this_date<-file.path(path_to_erawind_folder,paste0(gsub("-","_",this_date_hlc),".nc"))
+path_to_output_erawind_data_this_date_plus_one<-file.path(path_to_erawind_folder,paste0(gsub("-","_",this_date_hlc+1),".nc"))
 
-#we create the query
-query <-r_to_py(list(
-  class='ei',
-  dataset= "interim", #dataset
-  date= "2016-01-20/to/2016-01-31", #time period
-  expver= "1",
-  grid= "0.3/0.3", #resolution
-  levtype="sfc",
-  param= "165.128/166.128", # wind vertical and horizontal components
-  area=paste0(bbox_4326[2,2],"/",bbox_4326[1,1],"/",bbox_4326[2,1],"/",bbox_4326[1,2]), #N/W/S/E
-  step= "0",
-  stream="oper",
-  time="00:00:00/06:00:00/12:00:00/18:00:00", #hours
-  type="an",
-  format= "netcdf", #format
-  target='ERA_WIND/raw_data/ta2017.nc' #file name
+
+#we create the query for the date of catch, hours 18h to 23h
+query_this_date_hlc <- r_to_py(list(
+  variable= c("10m_u_component_of_wind","10m_v_component_of_wind"),
+  product_type= "reanalysis",
+  year= format(this_date_hlc, "%Y"),
+  month= format(this_date_hlc, "%m"), #formato: "01","01", etc.
+  day= format(this_date_hlc, "%d"), #stringr::str_pad(1:31,2,"left","0"),   
+  time= stringr::str_c(18:23,"00",sep=":")%>%str_pad(5,"left","0"),
+  format= "netcdf",
+  area = paste0(bbox_4326[2,2],"/",bbox_4326[1,1],"/",bbox_4326[2,1],"/",bbox_4326[1,2]) # North, West, South, East
 ))
 
-#query to get the ncdf
-server$retrieve(query)
+#we create the query for the date of catch + 1, hours 00h to 08h
+query_this_date_hlc_plus_one <- r_to_py(list(
+  variable= c("10m_u_component_of_wind","10m_v_component_of_wind"),
+  product_type= "reanalysis",
+  year= format(this_date_hlc+1, "%Y"),
+  month= format(this_date_hlc+1, "%m"), 
+  day= format(this_date_hlc+1, "%d"), 
+  time= stringr::str_c(00:08,"00",sep=":")%>%str_pad(5,"left","0"),
+  format= "netcdf",
+  area = paste0(bbox_4326[2,2],"/",bbox_4326[1,1],"/",bbox_4326[2,1],"/",bbox_4326[1,2])
+))
+
+#query the server to get the ncdf for date of catch and date of catch + 1
+server$retrieve("reanalysis-era5-single-levels",
+                query_this_date_hlc,
+                path_to_output_erawind_data_this_date)
+
+server$retrieve("reanalysis-era5-single-levels",
+                query_this_date_hlc_plus_one,
+                path_to_output_erawind_data_this_date_plus_one)
+
+##############################################################
+#### 4.2 - Prepare the data ####
+##############################################################
+
+# open path_to_output_erawind_data_this_date and preprocess each component (open each layer as raster (ie each hour), reproject to right epsg, resample, crop to ROI extent)
+# open path_to_output_erawind_data_this_date and preprocess (open each layer as raster (ie each hour), reproject to right epsg, resample, crop to ROI extent)
+# make a raster brick out of all the pre-processed rasters of path_to_output_erawind_data_this_date
+# make a raster brick out of all the pre-processed rasters of path_to_output_erawind_data_this_date
 
 
-nc <- nc_open("ta2017.nc")
-lat <- ncvar_get(nc,'latitude')
+brick_u10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"u10",roi_sp_utm,epsg,size_output_grid=250)
+brick_u10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"u10",roi_sp_utm,epsg,size_output_grid=250)
+brick_u10<-c(brick_u10_this_date,brick_u10_this_date_plus_one)
+brick_u10<-brick(brick_u10)
+wind_u10_mean<-mean(brick_u10,na.rm=TRUE)
+
+brick_v10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"v10",roi_sp_utm,epsg,size_output_grid=250)
+brick_v10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"v10",roi_sp_utm,epsg,size_output_grid=250)
+brick_v10<-c(brick_v10_this_date,brick_v10_this_date_plus_one)
+brick_v10<-brick(brick_v10)
+wind_v10_mean<-mean(brick_v10,na.rm=TRUE)
+
+# Wind speed is calculated by sqrt(u^2+v^2)
+wind_speed<-sqrt(wind_u10_mean^2+wind_v10_mean^2)
+names(wind_speed)="wind_speed"
+
+# Extract wind speed
+locations_hlc_sp_this_date <- raster::extract(wind_speed, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+
+#################################################################
+########### 5. Ephemeris of the Moon ###############
+#################################################################
+
+##############################################################
+#### 5.1 - Download the data ####
+##############################################################
+
+## More info on IMCCE web services at http://vo.imcce.fr/webservices/miriade/?ephemcc
+
+# Set output path
+path_to_output_imcce_data<-file.path(path_to_imcce_folder,paste0(gsub("-","_",this_date_hlc),".csv"))
+
+# Create URL to send as a web service
+observer<-paste0(mean(locations_hlc_sp_this_date$longitude),"%20",mean(locations_hlc_sp_this_date$latitude),"%200.0") # %20 is to encode the space in the URL
+
+url_imcce_moon<-paste0(url_imcce_webservice,"-name=s:Moon&-type=Satellite&-ep=",this_date_hlc,"T23:30:00&-nbd=1d&-step=1h&-tscale=UTC&-observer=",observer,"&-theory=INPOP&-teph=1&-tcoor=1&-mime=text/csv&-output=--jd&-extrap=0&-from=MiriadeDoc")
+
+# Download the data
+if (!(file.exists(path_to_output_imcce_data))){
+  httr::GET(url = url_imcce_moon, write_disk(path_to_output_imcce_data))
+} else {
+  cat(paste0("Data is already existing for date ",this_date_hlc,"\n"))
+}
+
+##############################################################
+#### 5.2 - Prepare the data ####
+##############################################################
+
+# Open the data
+moon_magnitude<-read.csv(path_to_output_imcce_data,skip=10)
+colnames(moon_magnitude)<-gsub("\\.","_",colnames(moon_magnitude))
+
+# Add moon visual magnitude to data frame
+locations_hlc_sp_this_date$moon_vmag <- moon_magnitude$V_Mag
+
+
+
+########### Other dynamic data: 
+# - MODIS yearly Land cover (https://cmr.earthdata.nasa.gov/search/concepts/C186286578-LPDAAC_ECS) (https://opendap.cr.usgs.gov/opendap/hyrax/MCD12Q1.006/contents.html)
+# - wet zones (extracted from S1)
+
+
+############ Static data: 
+# - DEM and DEM-derivatives
+# - land use / land cover (my data)
+# - built areas (facebook data) -> apply the same processings as for land use/land cover, 
+# - population (either fb data or react data)
+
+cat("Downloading High Resolution Settlement Layer (HRSL)...")
+httr::GET(url = "https://ciesin.columbia.edu/repository/hrsl/hrsl_civ_v1.zip", write_disk("/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1.zip"))
+cat("Downloading OK...")
+unzip("/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1.zip",exdir="/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1")
+
+# - night ligths : either dynamic (VNP46 products) or static (NASA 2013 dataset)
+
 
 
 
@@ -694,7 +980,7 @@ while (is.null(records)){
 ########################################################################################################################
 
 #### stop cluster ####
-stopCluster(cl)
+#stopCluster(cl)
 
 ########################################################################################################################
 ############ The end ############
