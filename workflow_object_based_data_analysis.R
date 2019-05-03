@@ -253,7 +253,7 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
 )
                              
 ### Parameters for step 8
-column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc.>
+column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("L1","L2"). Typically L1 is the most aggregated land cover, L2 is a less aggregated classification, etc.>
 column_name_lc_classification<-"L4" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
@@ -518,7 +518,7 @@ PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.d
 # Function PerformanceHRF
 path_to_PerformanceHRF_modif<-file.path(path_to_processing_folder,"PerformanceHRF_modif.R")
 download.file("https://raw.githubusercontent.com/ptaconet/r_react/master/functions/PerformanceHRF_modif.R",path_to_PerformanceHRF_modif)
-insertSource(path_to_PerformanceHRF_modif, package = "HieRanFor")
+insertSource(path_to_PerformanceHRF_modif, package = "HieRanFor", functions="PerformanceHRF")
 file.remove(path_to_PerformanceHRF_modif)
 
 
@@ -532,6 +532,7 @@ save_classif_to_disk_function<-function(dataset_classified, dataset_to_classify_
   #dataset_to_classify_sf<-merge(dataset_classified,dataset_to_classify_sf,by.x="cat",by.y="DN")  ## this is for hierarchical classif
   dataset_classified<-dataset_classified[,c("DN","predicted")]
   dataset_to_classify_sf<-merge(dataset_classified,dataset_to_classify_sf,by="DN")
+  dataset_to_classify_sf<-st_as_sf(dataset_to_classify_sf)
   sf::st_write(dataset_to_classify_sf,path_to_output_classification_vector,layer_options = "OVERWRITE=true")
   
   if (save_objects_raster==TRUE){
@@ -830,8 +831,10 @@ if(length(products_to_preprocess)>1){
 cat(res)
 
 # Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
-# TODO adapt using the gdalUtils::gdalwrap function
 system(paste0("gdalwarp -t_srs '",proj_srs,"' -overwrite ",dem_output_path_file," ",gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file)))
+# TODO adapt using the gdalUtils::gdalwrap function
+# gdalwarp(srcfile=dem_output_path_file,dstfile=gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file),t_srs=proj_srs,overwrite=TRUE)
+
 
 file.remove(dem_output_path_file)
 file.rename(gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file),dem_output_path_file)

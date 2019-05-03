@@ -31,21 +31,31 @@
 
 path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
+path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
 path_to_database<-"/home/ptaconet/Bureau/react.db"  
-path_to_sql_query_dates_loc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
+path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
+path_to_sql_query_population<-""
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
+path_to_csv_population<-NULL
 # Credential to the NASA servers (EarthData)
 username_EarthData<-"ptaconet"  #<EarthData username>
 password_EarthData<-"HHKcue51"  #<EarthData password>
+
+# Links to static data
+url_to_srtm_datasets<-c("http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N09W006.SRTMGL1.hgt.zip","http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N08W006.SRTMGL1.hgt.zip") # for BF : http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N10W004.SRTMGL1.hgt.zip   # Check tiles at : https://dwtkns.com/srtm30m/
+url_to_hrsl_dataset<-"https://ciesin.columbia.edu/repository/hrsl/hrsl_civ_v1.zip" # for BF: "https://ciesin.columbia.edu/repository/hrsl/hrsl_bfa_v1.zip"
+path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
+
+
 # Buffer size, within which the raster statistics will be computed (radius in meters)
 buffer_size_meters=2000 
 ## Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
-lag_days_modis_lst<-16
-lag_days_modis_veget<-20
-lag_days_modis_evapo<-30
-lag_days_gpm<-15
+lag_days_modis_lst<-40
+lag_days_modis_veget<-40
+lag_days_modis_evapo<-40
+lag_days_gpm<-40
 
 
 
@@ -66,6 +76,8 @@ require(ncdf4)
 require(reticulate)
 require(lubridate)
 library(stringr)
+require(rgrass7)
+
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -160,7 +172,8 @@ fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,r
 setwd(path_to_processing_folder)
 
 ## Set the paths of output folders / files and create them
-path_to_sentinel1_products<-file.path(path_to_processing_folder,"Sentinel_1")
+path_to_dem_folder<-file.path(path_to_processing_folder,"DEM_SRTM") # Path to the folder where the DEM raw data will be stored
+path_to_hrsl_folder<-file.path(path_to_processing_folder,"HRSL") 
 path_to_modislst_folder<-file.path(path_to_processing_folder,"MODIS_LST")
 path_to_modisveget_folder<-file.path(path_to_processing_folder,"MODIS_veget")
 path_to_modisevapo_folder<-file.path(path_to_processing_folder,"MODIS_evapo")
@@ -168,7 +181,7 @@ path_to_gpm_folder<-file.path(path_to_processing_folder,"GPM")
 path_to_erawind_folder<-file.path(path_to_processing_folder,"ERA_WIND")
 path_to_imcce_folder<-file.path(path_to_processing_folder,"IMCCE_Moon")
 
-directories<-list(path_to_sentinel1_products,path_to_modislst_folder,path_to_gpm_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
+directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_gpm_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
 lapply(directories, dir.create)
 
 ## Set ROI as sp SpatialPolygon object in epsg 4326
@@ -206,6 +219,11 @@ if(length(unique(modis_tile))>1){
   }
 }
 
+
+## Set GRASS environment and database location 
+loc <- rgrass7::initGRASS(path_to_grassApplications_folder, home=getwd(), gisDbase="GRASS_TEMP", override=TRUE,mapset = "PERMANENT" )
+execGRASS("g.proj",flags="c",parameters = list(proj4=paste0("+proj=utm +zone=",utm_zone_number," +datum=WGS84 +units=m +no_defs")))
+
 ## Get buffer size in degrees
 mean_latitude<-mean(bbox(roi_sp_4326)[2,])
 buffer_size_degrees <- buffer_size_meters / (111.32 * 1000 * cos(mean_latitude * ((pi / 180))))
@@ -219,7 +237,7 @@ if (!is.null(path_to_database)){
 # Connect to project database
 react_db <- dbConnect(RSQLite::SQLite(),path_to_database)
 # Get query to retrieve dates and locations of human landing catches. The query is stored on my github repository
-sql_query_hlc_dates_location<-paste(readLines(path_to_sql_query_dates_loc), collapse="\n")
+sql_query_hlc_dates_location<-paste(readLines(path_to_sql_query_dates_loc_hlc), collapse="\n")
 # Execute query
 df_dates_locations_hlc<-dbGetQuery(react_db, sql_query_hlc_dates_location)
 # Close connection
@@ -233,17 +251,131 @@ df_dates_locations_hlc <- df_dates_locations_hlc %>% filter (codepays_fk=="CI")
 ## Turn dataframe to HLC locations and date to sp SpatialPointsDataFrame
 dates_locations_hlc_sp_4326_proj<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
 dates_locations_hlc_sp_modis_proj<-spTransform(dates_locations_hlc_sp_4326_proj,modis_crs)
+dates_locations_hlc_sp_utm_proj<-spTransform(dates_locations_hlc_sp_4326_proj,CRS(paste0("+init=epsg:",epsg)))
 
 
 
 
+
+###############################################################################################################
+############################### A. Static data ################################
+###############################################################################################################
+
+##########################################################################
+########### A.1 DEM and DEM-derivatives ###############
+##########################################################################
+
+#####################################
+########### A.1.1 Download the data ###############
+#####################################
+
+for (i in 1:length(url_to_srtm_datasets)){
+  srtm_tile_name<-gsub(".*(.*)/","\\1",url_to_srtm_datasets[i])
+  if (!(file.exists(file.path(path_to_dem_folder,srtm_tile_name)))){
+  httr::GET(url_to_srtm_datasets[i],write_disk(file.path(path_to_dem_folder,srtm_tile_name)))
+  unzip(file.path(path_to_dem_folder,srtm_tile_name),exdir = path_to_dem_folder)
+  }
+}
+
+# Merge, crop and reproject to UTM the rasters
+dem_output_path<-file.path(path_to_dem_folder,"DEM.tif")
+if (!(file.exists(dem_output_path))){
+  path_to_srtm_tiles<-list.files(path_to_dem_folder,pattern = "hgt",full.names = T)
+
+  s <- lapply(path_to_srtm_tiles, stack)
+  m <- do.call(merge, s)
+  m <- crop(m,roi_sp_4326)
+
+  writeRaster(m,file.path(path_to_dem_folder,"DEM.tif"))
+
+  # Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
+  gdalwarp(srcfile=dem_output_path,dstfile=gsub("DEM.tif","DEM_temp.tif",dem_output_path),dstnodata=0,t_srs=paste0("+proj=utm +zone=",utm_zone_number," +datum=WGS84 +units=m +no_defs"))
+  file.remove(dem_output_path)
+  file.rename(gsub("DEM.tif","DEM_temp.tif",dem_output_path),dem_output_path)
+  
+}
+
+#####################################
+########### A.1.2 Prepare the data ###############
+#####################################
+
+# extract indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index ####
+
+## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
+
+# Set output paths
+slope_output_path<-file.path(path_to_dem_folder,"slope.tif")
+aspect_output_path<-file.path(path_to_dem_folder,"aspect.tif")
+accumulation_output_path<-file.path(path_to_dem_folder,"accumulation.tif")
+tci_output_path<-file.path(path_to_dem_folder,"tci.tif") 
+twi_output_path<-file.path(path_to_dem_folder,"twi.tif") 
+
+# Import DEM to GRASS and set region
+execGRASS("r.external", flags="o", parameters=list(input=file.path(path_to_dem_folder,"DEM.tif"), output="tmprast",band=1))
+execGRASS("g.region", parameters=list(raster="tmprast")) 
+
+# Compute slope and aspect and save to disk
+execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="tmprast", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="slope", output=slope_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="aspect", output=aspect_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
+# Compute hydrograpy indices and save to disk
+execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="tmprast", accumulation="accumulation", tci="tci"))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="accumulation", output=accumulation_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci", output=tci_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
+# Compute TWI indice
+execGRASS("r.topidx", flags="overwrite", parameters=list(input="tmprast", output="twi"))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="twi", output=twi_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
+# open all rasters
+dem_and_derivatives_rast <- brick(list(dem_output_path,slope_output_path,aspect_output_path,accumulation_output_path,tci_output_path,twi_output_path))
+
+# calculate the stats within the buffer
+dates_locations_hlc_sp_utm_proj <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp_utm_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+
+
+##########################################################################
+########### A.2 Settlements ###############
+##########################################################################
+
+
+#####################################
+########### A.2.1 Download the data ###############
+#####################################
+
+path_to_hrsl_zip<-file.path(path_to_hrsl_folder,gsub(".*(.*)/","\\1",url_to_hrsl_dataset))
+if (!(file.exists(path_to_hrsl_zip))){
+  httr::GET(url_to_hrsl_dataset,write_disk(path_to_hrsl_zip))
+  unzip(path_to_hrsl_zip,exdir = path_to_hrsl_folder)
+}
+
+#####################################
+########### A.2.1 Prepare the data ###############
+#####################################
+
+# Identify, open and crop to ROI settlement raster
+path_settlements_rast<-list.files(path_to_hrsl_folder,pattern = "settlement.tif",full.names = T)[1]
+settlements_rast<-raster(path_settlements_rast)
+settlements_rast<-crop(settlements_rast,roi_sp_4326)
+
+
+# to be continued...
+
+
+
+
+###############################################################################################################
+############################### B. Dynamic data ################################
+###############################################################################################################
 
 ## Get all dates
 all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
 
 
 ## For tests: retrieve all the lines for the first date
-i=3
+i=20
 locations_hlc_sp_this_date_modis_proj<-dates_locations_hlc_sp_modis_proj[which(dates_locations_hlc_sp_modis_proj$datecapture==all_dates_hlc[i]),]
 this_date_hlc<-as.Date(all_dates_hlc[i])
 
@@ -283,10 +415,10 @@ if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_terra
 if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_veget_aqua_time_index.txt")))){
   httr::GET(paste0(url_opendap_modis_veget_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modisveget_folder,"opendap_modis_veget_aqua_time_index.txt")))
 }
-if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_evapo_terra_time_index.txt")))){
+if (!(file.exists(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_terra_time_index.txt")))){
   httr::GET(paste0(url_opendap_modis_evapo_terra,".ncml.ascii?time"),write_disk(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_terra_time_index.txt")))
 }
-if (!(file.exists(file.path(path_to_modisveget_folder,"opendap_modis_evapo_aqua_time_index.txt")))){
+if (!(file.exists(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_aqua_time_index.txt")))){
   httr::GET(paste0(url_opendap_modis_evapo_aqua,".ncml.ascii?time"),write_disk(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_aqua_time_index.txt")))
 }
 
@@ -441,8 +573,7 @@ cat("Starting workflow")
 #### 1.1 - Download the data ####
 ##############################################################
 
-time_range<-as.character(c(this_date_hlc-lag_days_modis_lst,this_date_hlc))
-dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
+dates_modis_lst <-seq(this_date_hlc,this_date_hlc-lag_days_modis_lst,-1)
 
 # Function to build the OpenDap URL to dowload MODIS LST night and day 1km data. input parameters : date and satellite (terra or aqua)
 fun_build_modis_lst_opendap_url<-function(date_catch,satellite){
@@ -466,15 +597,15 @@ fun_build_modis_lst_opendap_url<-function(date_catch,satellite){
 
 
 ## Download the data 
-for (i in 1:length(dates)){
-  cat(paste0("Downloading MODIS LST Terra and Aqua (MOD11A1 and MYD11A1) for the ROI and for date ",dates[i],"\n"))
+for (i in 1:length(dates_modis_lst)){
+  cat(paste0("Downloading MODIS LST Terra and Aqua (MOD11A1 and MYD11A1) for the ROI and for date ",dates_modis_lst[i],"\n"))
   for (j in c("terra","aqua")){
-    opendap_modis<-fun_build_modis_lst_opendap_url(dates[i],j)
-    path_to_dataset<-file.path(path_to_modislst_raw_folder,paste0(gsub("-","",dates[i]),"_",j,".nc4"))
+    opendap_modis<-fun_build_modis_lst_opendap_url(dates_modis_lst[i],j)
+    path_to_dataset<-file.path(path_to_modislst_folder,paste0(gsub("-","",dates_modis_lst[i]),"_",j,".nc4"))
     if (!(file.exists(path_to_dataset))){
       httr::GET(opendap_modis,write_disk(path_to_dataset))
     } else {
-      cat(paste0("Data already exist for date ",dates[i],"\n"))
+      cat(paste0("Data already exist for date ",dates_modis_lst[i],"\n"))
     }
   }
 }
@@ -495,17 +626,16 @@ for (i in 1:length(dates)){
 
 
 # Get Terra and Aqua products to preprocess 
-dates<-rev(dates)
-terra_names<-file.path(path_to_modislst_raw_folder,paste0(gsub("-","",dates),"_terra.nc4"))
-aqua_names<-file.path(path_to_modislst_raw_folder,paste0(gsub("-","",dates),"_aqua.nc4"))
+terra_names<-file.path(path_to_modislst_folder,paste0(gsub("-","",dates_modis_lst),"_terra.nc4"))
+aqua_names<-file.path(path_to_modislst_folder,paste0(gsub("-","",dates_modis_lst),"_aqua.nc4"))
 
 
 brick_lst_day<-NULL
 brick_lst_night<-NULL
 
-for (i in 1:length(dates)){
+for (i in 1:length(dates_modis_lst)){
 
-  cat(paste0("pre-processing LST for date ",dates[i],"\n"))
+  cat(paste0("pre-processing LST for date ",dates_modis_lst[i],"\n"))
 
 # Create raster of LST_day maximum value combining Terra and Aqua by taking the maximum available value for each pixel
 rast_lst_day_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Day_1km")
@@ -562,8 +692,8 @@ locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_night, locati
 #### 2.1 - Download the data ####
 ##############################################################
 
-time_range<-as.character(c(this_date_hlc-lag_days_modis_veget,this_date_hlc+8))
-dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
+# MODIS Veget are every 8 days
+date_modis_veget<-seq(this_date_hlc,this_date_hlc-lag_days_modis_veget,-8)
 
 ## Retrieve date and satellite of the week including the catch (i.e. closest start aquisition date from the catch date) and build the link to download the data
 # Function to build the OpenDap URL to dowload MODIS Vegetion indices NDVI and EVI 250m data. input parameters : date
@@ -606,15 +736,13 @@ fun_build_modis_veget_opendap_url<-function(date_catch){
 
 ## Download data
 
-date_modis_veget<-c(this_date_hlc,this_date_hlc-8,this_date_hlc-16)
-
 modisveget_list_paths<-NULL
 modisveget_list_names<-NULL
 
 for (i in 1:length(date_modis_veget)){
   cat(paste0("Downloading MODIS Vegetation indices data for the ROI and for available file closest to date ",date_modis_veget[i],"\n"))
   urls_infos<-fun_build_modis_veget_opendap_url(date_modis_veget[i])
-  path<-file.path(path_to_modisveget_raw_folder,paste0(urls_infos[[2]],"_",gsub("-","_",urls_infos[[4]]),".nc4"))
+  path<-file.path(path_to_modisveget_folder,paste0(urls_infos[[2]],"_",gsub("-","_",urls_infos[[4]]),".nc4"))
   modisveget_list_paths<-c(modisveget_list_paths,path)
   modisveget_list_names<-c(modisveget_list_names,as.character(abs(difftime(date_modis_veget[i] ,this_date_hlc , units = c("days")))))
   if (!(file.exists(path))){
@@ -672,48 +800,90 @@ dates_locations_hlc_sp_modis_proj <- raster::extract(brick_modisveget, dates_loc
 #### 3.1 - Download the data ####
 ##############################################################
 
+## Function to look for the closest date to the HLC and retrieve the corresponding OpenDAP time index
+## MODIS evaporation are every 8 days, and both Terra and Aqua have the same dates (not as for Vegetation)
 
-## Look for the closest date to the HLC and retrieve the corresponding OpenDAP index
-date_catch_julian<-as.integer(difftime(this_date_hlc ,"2000-01-01" , units = c("days")))
-index_opendap_closest_to_date<-which.min(abs(opendap_modis_evapo_terra_time_index-date_catch_julian))
-days_sep_from_date<-opendap_modis_evapo_terra_time_index[index_opendap_closest_to_date]-date_catch_julian
-if(days_sep_from_date<=0){
-  index_opendap_closest_to_date<-index_opendap_closest_to_date-1
-} else {
-  index_opendap_closest_to_date<-index_opendap_closest_to_date-2
-}
+dates_modis_evapo<-seq(this_date_hlc,this_date_hlc-lag_days_modis_evapo,-8)
 
-## MODIS evaporation are every 8 days, and both Terra and Aqua have the same dates (not as for Vegetation). Hence we retrieve the floor(lag_days_modis_evapo/8) datasets
-number_datasets_to_retrieve<-floor(lag_days_modis_evapo/8)
-
-index_opendap_dates_to_retrieve<-seq(index_opendap_closest_to_date,index_opendap_closest_to_date-number_datasets_to_retrieve,-1)
-dates<-as.Date("2000-01-01")+opendap_modis_evapo_terra_time_index[index_opendap_dates_to_retrieve+1]
+fun_build_modis_evapo_opendap_url<-function(date_catch,satellite){
   
-modisevapo_list_paths<-NULL
-modisevapo_list_names<-NULL
+  if (satellite=="terra"){
+    opendap_time_index<-opendap_modis_evapo_terra_time_index
+    url_opendap<-url_opendap_modis_evapo_terra
+  } else if (satellite=="aqua"){
+    opendap_time_index<-opendap_modis_evapo_aqua_time_index
+    url_opendap<-url_opendap_modis_evapo_aqua
+  }
+  
+  date_catch_julian<-as.integer(difftime(date_catch ,"2000-01-01" , units = c("days")))
+  index_opendap_closest_to_date<-which.min(abs(opendap_time_index-date_catch_julian))
+  days_sep_from_date<-opendap_time_index[index_opendap_closest_to_date]-date_catch_julian
+  if(days_sep_from_date<=0){ 
+    index_opendap_closest_to_date<-index_opendap_closest_to_date-1
+  } else {
+    index_opendap_closest_to_date<-index_opendap_closest_to_date-2
+  }
 
+  date<-as.Date("2000-01-01")+opendap_time_index[index_opendap_closest_to_date+1]
+
+  url_opendap<-paste0(url_opendap,".ncml.nc4?MOD_Grid_MOD16A2_eos_cf_projection,ET_500m[",index_opendap_closest_to_date,"][",index_opendap_modisevapo_lat_min,":",index_opendap_modisevapo_lat_max,"][",index_opendap_modisevapo_lon_min,":",index_opendap_modisevapo_lon_max,"],time[",index_opendap_closest_to_date,"],YDim[",index_opendap_modisevapo_lat_min,":",index_opendap_modisevapo_lat_max,"],XDim[",index_opendap_modisevapo_lon_min,":",index_opendap_modisevapo_lon_max,"]")
+  
+  return(list(url_opendap,date))
+}
+  
+
+dates_modis_evapo_real<-NULL
 
 ## Download the data 
-for (i in 1:length(dates)){
-  cat(paste0("Downloading MODIS evapotranspiration Terra and Aqua (MOD16A2 and MYD16A2) for the ROI and for date ",dates[i],"\n"))
-  for (j in c(modis_evapo_terra_collection,modis_evapo_aqua_collection)){
-    url_opendap<-paste0(url_modis_opendap,"/",j,"/",modis_tile,".ncml.nc4?MOD_Grid_MOD16A2_eos_cf_projection,ET_500m[",index_opendap_dates_to_retrieve[i],"][",index_opendap_modisevapo_lat_min,":",index_opendap_modisevapo_lat_max,"][",index_opendap_modisevapo_lon_min,":",index_opendap_modisevapo_lon_max,"],time[",index_opendap_dates_to_retrieve[i],"],YDim[",index_opendap_modisevapo_lat_min,":",index_opendap_modisevapo_lat_max,"],XDim[",index_opendap_modisevapo_lon_min,":",index_opendap_modisevapo_lon_max,"]")
-    path_to_dataset<-file.path(path_to_modisevapo_folder,paste0(gsub("-","",dates[i]),"_",j,".nc4"))
+for (i in 1:length(dates_modis_evapo)){
+  cat(paste0("Downloading MODIS Evapotranspiration Terra and Aqua (MOD16A2 and MYD16A2) for the ROI and for the closest date to ",dates_modis_evapo[i],"\n"))
+  for (j in c("terra","aqua")){
+    opendap_modis<-fun_build_modis_evapo_opendap_url(dates_modis_evapo[i],j)
+    path_to_dataset<-file.path(path_to_modisevapo_folder,paste0(gsub("-","",opendap_modis[[2]]),"_",j,".nc4"))
     if (!(file.exists(path_to_dataset))){
-      httr::GET(url_opendap,write_disk(path_to_dataset))
+      httr::GET(opendap_modis[[1]],write_disk(path_to_dataset))
     } else {
-      cat(paste0("Data already exist for date ",dates[i],"\n"))
+      cat(paste0("Data already exist for date ",dates_modis_evapo[i],"\n"))
     }
   }
+  dates_modis_evapo_real<-c(dates_modis_evapo_real,as.character(opendap_modis[[2]]))
 }
-
-
-
 
 
 ##############################################################
 #### 3.2 - Prepare the data ####
 ##############################################################
+
+# Get Terra and Aqua products to preprocess 
+terra_names<-file.path(path_to_modisevapo_folder,paste0(gsub("-","",dates_modis_evapo_real),"_terra.nc4"))
+aqua_names<-file.path(path_to_modisevapo_folder,paste0(gsub("-","",dates_modis_evapo_real),"_aqua.nc4"))
+
+brick_modisevapo<-NULL
+
+for (i in 1:length(dates_modis_evapo_real)){
+  
+  cat(paste0("pre-processing LST for date ",dates_modis_evapo_real[i],"\n"))
+  
+  # Create raster of evapotranspiration by combining Terra and Aqua and taking the average between both values
+  rast_evapo_terra<-fun_preprocess_modis_product(terra_names[i],"ET_500m")
+  rast_evapo_aqua<-fun_preprocess_modis_product(aqua_names[i],"ET_500m")
+  
+  # Set pixel values >= 32760 (quality pixel values) to NA 
+  rast_evapo_terra[rast_evapo_terra >= 32760] <- NA
+  rast_evapo_aqua[rast_evapo_aqua >= 32760] <- NA
+  
+  rast_evapo<-brick(rast_evapo_terra,rast_evapo_aqua)
+  rast_evapo<-mean(rast_evapo,na.rm=TRUE)
+
+  brick_modisevapo<-c(brick_modisevapo,rast_evapo)
+  names(brick_modisevapo[[length(brick_modisevapo)]])<-paste0("evapo_",i-1)
+  
+}
+
+brick_modisevapo<-brick(brick_modisevapo)
+
+locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
 
 #####################################
 ########### 4. GPM ###############
@@ -848,13 +1018,13 @@ for (i in 1:length(gpm_list_paths)){
 
 brick_gpm<-brick(brick_gpm)
 
-## Sum of the precipitations for the 15 days
+## Sum of the precipitations for the n days (on a 3 days moving window ?)
 precip_sum<-sum(brick_gpm,na.rm = T)
 names(precip_sum)<-"precip_sum"
 ## Precipitation for the date of HLC
 precip_0<-brick_gpm[[1]]
 names(precip_0)<-"precip_0"
-## Number of days with precipitations during the 15 days before the HLC
+## Number of days with precipitations during the n days before the HLC
 precip_ndays<-sum(brick(brick_gpm_positive_precip),na.rm = T)
 names(precip_ndays)<-"precip_ndays"
 
@@ -992,9 +1162,20 @@ locations_hlc_sp_this_date$moon_vmag <- moon_magnitude$V_Mag
 # - wet zones (extracted from S1)
 
 
+#################################################################
+########### 7. DEM and dem-derivatives ###############
+#################################################################
+
+##############################################################
+#### 7.1 - Download the data ####
+##############################################################
+
+
+
+
 ############ Static data: 
 # - DEM and DEM-derivatives
-# - land use / land cover (my data)
+# - land use / land cover (my data) . Check tutos at : https://www.r-craft.org/r-news/efficient-landscape-metrics-calculations-for-buffers-around-sampling-points/  and https://cran.rstudio.com/web/packages/landscapemetrics/vignettes/getstarted.html
 # - built-up areas (facebook data) -> apply the same processings as for land use/land cover, 
 # - population (either fb data or react data)
 
