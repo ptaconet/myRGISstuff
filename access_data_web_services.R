@@ -35,7 +35,7 @@ path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with gra
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
 path_to_database<-"/home/ptaconet/Bureau/react.db"  
 path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
-path_to_sql_query_population<-""
+path_to_sql_query_population<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/population_villages.sql"
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
 path_to_csv_population<-NULL
@@ -43,7 +43,7 @@ path_to_csv_population<-NULL
 username_EarthData<-"ptaconet"  #<EarthData username>
 password_EarthData<-"HHKcue51"  #<EarthData password>
 
-# Links to static data
+# URLs or paths to static data
 url_to_srtm_datasets<-c("http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N09W006.SRTMGL1.hgt.zip","http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N08W006.SRTMGL1.hgt.zip") # for BF : http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N10W004.SRTMGL1.hgt.zip   # Check tiles at : https://dwtkns.com/srtm30m/
 url_to_hrsl_dataset<-"https://ciesin.columbia.edu/repository/hrsl/hrsl_civ_v1.zip" # for BF: "https://ciesin.columbia.edu/repository/hrsl/hrsl_bfa_v1.zip"
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
@@ -77,7 +77,8 @@ require(reticulate)
 require(lubridate)
 library(stringr)
 require(rgrass7)
-
+require(landscapemetrics)
+require(landscapetools)
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -91,6 +92,7 @@ require(rgrass7)
 url_modis_opendap<-"https://opendap.cr.usgs.gov/opendap/hyrax"
 url_gpm_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
 url_imcce_webservice<-"http://vo.imcce.fr/webservices/miriade/ephemcc_query.php?"
+url_noaa_nighttime_webservice<-"https://gis.ngdc.noaa.gov/arcgis/rest/services/NPP_VIIRS_DNB/Monthly_AvgRadiance/ImageServer/exportImage"
 modis_lst_terra_collection<-"MOD11A1.006"
 modis_lst_aqua_collection<-"MYD11A1.006"
 modis_veget_terra_collection<-"MOD13Q1.006"
@@ -178,10 +180,11 @@ path_to_modislst_folder<-file.path(path_to_processing_folder,"MODIS_LST")
 path_to_modisveget_folder<-file.path(path_to_processing_folder,"MODIS_veget")
 path_to_modisevapo_folder<-file.path(path_to_processing_folder,"MODIS_evapo")
 path_to_gpm_folder<-file.path(path_to_processing_folder,"GPM")
+path_to_nighttime_folder<-file.path(path_to_processing_folder,"VIIRS_nighttime")
 path_to_erawind_folder<-file.path(path_to_processing_folder,"ERA_WIND")
 path_to_imcce_folder<-file.path(path_to_processing_folder,"IMCCE_Moon")
 
-directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_gpm_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
+directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_gpm_folder,path_to_nighttime_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
 lapply(directories, dir.create)
 
 ## Set ROI as sp SpatialPolygon object in epsg 4326
@@ -225,8 +228,13 @@ loc <- rgrass7::initGRASS(path_to_grassApplications_folder, home=getwd(), gisDba
 execGRASS("g.proj",flags="c",parameters = list(proj4=paste0("+proj=utm +zone=",utm_zone_number," +datum=WGS84 +units=m +no_defs")))
 
 ## Get buffer size in degrees
+fun_convert_meters_to_degrees<-function(buffer_size_meters,mean_latitude){
+  buffer_size_degrees <- buffer_size_meters / (111.32 * 1000 * cos(mean_latitude * ((pi / 180))))
+return(buffer_size_degrees)
+}
+
 mean_latitude<-mean(bbox(roi_sp_4326)[2,])
-buffer_size_degrees <- buffer_size_meters / (111.32 * 1000 * cos(mean_latitude * ((pi / 180))))
+buffer_size_degrees<-fun_convert_meters_to_degrees(buffer_size_meters,mean_latitude)
 
 ## Set ROI as sp SpatialPolygon object in UTM epsg and in MODIS projection
 roi_sp_utm <- spTransform(roi_sp_4326, CRS(paste0("+init=epsg:",epsg)))
@@ -236,23 +244,34 @@ roi_sp_modis_project <- spTransform(roi_sp_4326, modis_crs)
 if (!is.null(path_to_database)){
 # Connect to project database
 react_db <- dbConnect(RSQLite::SQLite(),path_to_database)
-# Get query to retrieve dates and locations of human landing catches. The query is stored on my github repository
+# Get query to retrieve dates and locations of human landing catches and execute it. The query is stored on my github repository
 sql_query_hlc_dates_location<-paste(readLines(path_to_sql_query_dates_loc_hlc), collapse="\n")
-# Execute query
 df_dates_locations_hlc<-dbGetQuery(react_db, sql_query_hlc_dates_location)
+# Get query to retrieve the population of the villages and execute it. The query is stored on my github repository
+sql_query_population_villages<-paste(readLines(path_to_sql_query_population), collapse="\n")
+df_population_villages<-dbGetQuery(react_db, sql_query_population_villages)
 # Close connection
 dbDisconnect(react_db)
 } else {
   df_dates_locations_hlc<-read.csv(path_to_csv_dates_loc)
+  df_population_villages<-read.csv(path_to_csv_population)
 }
 
 ## Filter data only for CIV
 df_dates_locations_hlc <- df_dates_locations_hlc %>% filter (codepays_fk=="CI")
-## Turn dataframe to HLC locations and date to sp SpatialPointsDataFrame
-dates_locations_hlc_sp_4326_proj<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
-dates_locations_hlc_sp_modis_proj<-spTransform(dates_locations_hlc_sp_4326_proj,modis_crs)
-dates_locations_hlc_sp_utm_proj<-spTransform(dates_locations_hlc_sp_4326_proj,CRS(paste0("+init=epsg:",epsg)))
+## Turn dataframe to HLC to sp SpatialPointsDataFrame
+dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
+#dates_locations_hlc_sp_modis_proj<-spTransform(dates_locations_hlc_sp_4326_proj,modis_crs)
 
+# Check that all the points are within the ROI 
+bbox_hlc<-bbox(dates_locations_hlc_sp)
+bbox_roi<-bbox(roi_sp_4326)
+if (bbox_hlc[1,1]<bbox_roi[1,1]|bbox_hlc[1,2]>bbox_roi[2,1]|bbox_hlc[2,1]<bbox_roi[2,1]||bbox_hlc[2,2]>bbox_roi[2,2]){
+  stop("Some points of your HLC data lie outside of the ROI")
+}
+
+# To delete when the coordinates of the points are validated
+dates_locations_hlc_sp<-crop(dates_locations_hlc_sp,extent(roi_sp_4326))
 
 
 
@@ -264,6 +283,14 @@ dates_locations_hlc_sp_utm_proj<-spTransform(dates_locations_hlc_sp_4326_proj,CR
 ##########################################################################
 ########### A.1 DEM and DEM-derivatives ###############
 ##########################################################################
+
+# Set output paths
+dem_output_path<-file.path(path_to_dem_folder,"DEM.tif")
+slope_output_path<-file.path(path_to_dem_folder,"slope.tif")
+aspect_output_path<-file.path(path_to_dem_folder,"aspect.tif")
+accumulation_output_path<-file.path(path_to_dem_folder,"accumulation.tif")
+tci_output_path<-file.path(path_to_dem_folder,"tci.tif") 
+twi_output_path<-file.path(path_to_dem_folder,"twi.tif") 
 
 #####################################
 ########### A.1.1 Download the data ###############
@@ -278,7 +305,6 @@ for (i in 1:length(url_to_srtm_datasets)){
 }
 
 # Merge, crop and reproject to UTM the rasters
-dem_output_path<-file.path(path_to_dem_folder,"DEM.tif")
 if (!(file.exists(dem_output_path))){
   path_to_srtm_tiles<-list.files(path_to_dem_folder,pattern = "hgt",full.names = T)
 
@@ -299,47 +325,47 @@ if (!(file.exists(dem_output_path))){
 ########### A.1.2 Prepare the data ###############
 #####################################
 
-# extract indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index ####
+# extract indices from the DEM : slope, aspect, flow accumulation, topographic convergence index ####
 
 ## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
 
-# Set output paths
-slope_output_path<-file.path(path_to_dem_folder,"slope.tif")
-aspect_output_path<-file.path(path_to_dem_folder,"aspect.tif")
-accumulation_output_path<-file.path(path_to_dem_folder,"accumulation.tif")
-tci_output_path<-file.path(path_to_dem_folder,"tci.tif") 
-twi_output_path<-file.path(path_to_dem_folder,"twi.tif") 
+if(!file.exists(slope_output_path)|!file.exists(aspect_output_path)|!file.exists(accumulation_output_path)|!file.exists(tci_output_path)|!file.exists(twi_output_path)){
+  # Import DEM to GRASS and set region
+  execGRASS("r.external", flags="o", parameters=list(input=file.path(path_to_dem_folder,"DEM.tif"), output="tmprast",band=1))
+  execGRASS("g.region", parameters=list(raster="tmprast")) 
 
-# Import DEM to GRASS and set region
-execGRASS("r.external", flags="o", parameters=list(input=file.path(path_to_dem_folder,"DEM.tif"), output="tmprast",band=1))
-execGRASS("g.region", parameters=list(raster="tmprast")) 
+  # Compute slope and aspect and save to disk
+  execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="tmprast", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="slope", output=slope_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="aspect", output=aspect_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 
-# Compute slope and aspect and save to disk
-execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="tmprast", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="slope", output=slope_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="aspect", output=aspect_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  # Compute hydrograpy indices and save to disk
+  execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="tmprast", accumulation="accumulation", tci="tci"))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="accumulation", output=accumulation_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci", output=tci_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 
-# Compute hydrograpy indices and save to disk
-execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="tmprast", accumulation="accumulation", tci="tci"))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="accumulation", output=accumulation_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci", output=tci_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
-
-# Compute TWI indice
-execGRASS("r.topidx", flags="overwrite", parameters=list(input="tmprast", output="twi"))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="twi", output=twi_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  # Compute TWI indice
+  execGRASS("r.topidx", flags="overwrite", parameters=list(input="tmprast", output="twi"))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="twi", output=twi_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+}
 
 # open all rasters
 dem_and_derivatives_rast <- brick(list(dem_output_path,slope_output_path,aspect_output_path,accumulation_output_path,tci_output_path,twi_output_path))
+names(dem_and_derivatives_rast)[1]<-"elevation"
 
-# calculate the stats within the buffer
-dates_locations_hlc_sp_utm_proj <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp_utm_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-
+# calculate the stats within the buffer. First convert HLC dataset to UTM proj . EDIT : for the accumulation, might be interesting to also extract the maximum
+dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,CRS(paste0("+init=epsg:",epsg)))
+dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=FALSE) 
+##### WARNING : the function raster::extract can produce error that are not visible (ie no error is returned) if points are outside the raster extent. It is very important to check that at least one raster cell is intersected
 
 
 ##########################################################################
 ########### A.2 Settlements ###############
 ##########################################################################
 
+## Note: we could have derived the settlements by computing a texture indice on the VHR satellite image (Spot6) and applying a threshold, as some texture catch the houses very well. However, after visual comparison between the SPOT6 image and the HRSL dataset, we decided to use the HRSL dataset as it seems good enough to locate the houses.
+
+## Variables : surface built, shape indices
 
 #####################################
 ########### A.2.1 Download the data ###############
@@ -355,15 +381,41 @@ if (!(file.exists(path_to_hrsl_zip))){
 ########### A.2.1 Prepare the data ###############
 #####################################
 
-# Identify, open and crop to ROI settlement raster
+# Open and crop to ROI settlement raster file
 path_settlements_rast<-list.files(path_to_hrsl_folder,pattern = "settlement.tif",full.names = T)[1]
 settlements_rast<-raster(path_settlements_rast)
 settlements_rast<-crop(settlements_rast,roi_sp_4326)
+names(settlements_rast)<-"settlement_surf"
+
+# Get the surface built in the village (buffer of 300 m around the HLC - we consider that a village is not more than this size)
+dates_locations_hlc_sp <- raster::extract(settlements_rast, dates_locations_hlc_sp, buffer=300,fun=sum, na.rm=TRUE, sp=TRUE,small=TRUE) 
+# We put the surface of the village in m2. 1 pixel is 30m*30m
+dates_locations_hlc_sp$settlement_surf<-dates_locations_hlc_sp$settlement_surf*30^2
 
 
-# to be continued...
 
 
+
+##########################################################################
+########### A.3 Population ###############
+##########################################################################
+
+## Variables : total population in the village, population density
+# Population
+dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,df_population_villages,by="village")
+
+# Population density (pers / m2 of built surface)
+dates_locations_hlc_sp$population_density<-dates_locations_hlc_sp$settlement_surf/dates_locations_hlc_sp$population
+
+
+
+##########################################################################
+########### A.4 Land use / land cover ###############
+##########################################################################
+
+#####################################
+########### A.4.1 Prepare the data ###############
+#####################################
 
 
 ###############################################################################################################
@@ -376,7 +428,7 @@ all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
 
 ## For tests: retrieve all the lines for the first date
 i=20
-locations_hlc_sp_this_date_modis_proj<-dates_locations_hlc_sp_modis_proj[which(dates_locations_hlc_sp_modis_proj$datecapture==all_dates_hlc[i]),]
+locations_hlc_sp_this_date<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$datecapture==all_dates_hlc[i]),]
 this_date_hlc<-as.Date(all_dates_hlc[i])
 
 
@@ -1034,6 +1086,61 @@ locations_hlc_sp_this_date <- raster::extract(precip_0, locations_hlc_sp_this_da
 locations_hlc_sp_this_date <- raster::extract(precip_ndays, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
 
+
+#####################################
+########### 5. Night lights ###############
+#####################################
+
+# info on data : https://ngdc.noaa.gov/eog/viirs/download_dnb_composites.html and https://noaa.maps.arcgis.com/home/item.html?id=d7c95b2da6fd43cd9dec19b212f145db
+
+# map viewer : https://maps.ngdc.noaa.gov/viewers/VIIRS_DNB_nighttime_imagery/index.html
+
+# data service : https://gis.ngdc.noaa.gov/arcgis/rest/services/NPP_VIIRS_DNB/Monthly_AvgRadiance/ImageServer/
+
+# NOAA VIIRS DNB Nighttime Lights Monthly Composites are monthly products. We download the data for the month of the HCL
+
+##############################################################
+#### 5.1 - Download the data ####
+##############################################################
+
+date_start<-as.Date(paste0(substr(this_date_hlc,1,7),"-01"))
+date_end<-seq(date_start, by = "1 month", length = 2)[2]
+
+time_start<-as.integer(difftime(date_start ,"1970-01-01" , units = c("secs")))*1000
+time_end<-as.integer(difftime(date_end ,"1970-01-01" , units = c("secs")))*1000
+
+url_product<-paste0(url_noaa_nighttime_webservice,"?bbox=",bbox_roi[1,1],",",bbox_roi[2,1],",",bbox_roi[1,2],",",bbox_roi[2,2],"&time=",time_start,",",time_end,"&format=tiff&f=image")
+path_to_output_nighttime<-file.path(path_to_nighttime_folder,paste0(gsub("-","_",date_start),".tif"))
+
+url_product_cloudcover<-gsub("Monthly_AvgRadiance","Monthly_CloudFreeCoverage",url_product)
+path_to_output_nighttime_cloudcover<-file.path(path_to_nighttime_folder,paste0(gsub("-","_",date_start),"_cloudfreecov.tif"))
+
+if (!file.exists(path_to_output_nighttime)){
+  cat(paste0("Downloading Night lights data for the ROI and for month ",date_start,"\n"))
+  GET(url_product,write_disk(path_to_output_nighttime))
+  GET(url_product_cloudcover,write_disk(path_to_output_nighttime_cloudcover))
+} else {
+  cat(paste0("Data is already existing for month ",date_start,"\n"))
+}
+
+
+##############################################################
+#### 5.2 - Prepare the data ####
+##############################################################
+
+# Open the data 
+nighttime_rast<-raster(path_to_output_nighttime)
+nighttime_cloudcover<-raster(path_to_output_nighttime_cloudcover)
+
+# Quality control : exclude pixels with 0 cloud-free observations
+nighttime_cloudcover[nighttime_cloudcover==0]<-NA
+nighttime_rast <- mask(nighttime_rast, nighttime_cloudcover)
+
+# Extract mean of DNB radiance. However change the buffer size (500 m) ? 
+names(nighttime_rast)<-"nightligth_mean"
+locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+
 #####################################
 ########### 5. Wind (ERA) ###############
 #####################################
@@ -1162,27 +1269,14 @@ locations_hlc_sp_this_date$moon_vmag <- moon_magnitude$V_Mag
 # - wet zones (extracted from S1)
 
 
-#################################################################
-########### 7. DEM and dem-derivatives ###############
-#################################################################
-
-##############################################################
-#### 7.1 - Download the data ####
-##############################################################
-
-
-
 
 ############ Static data: 
 # - DEM and DEM-derivatives
 # - land use / land cover (my data) . Check tutos at : https://www.r-craft.org/r-news/efficient-landscape-metrics-calculations-for-buffers-around-sampling-points/  and https://cran.rstudio.com/web/packages/landscapemetrics/vignettes/getstarted.html
 # - built-up areas (facebook data) -> apply the same processings as for land use/land cover, 
 # - population (either fb data or react data)
-
-cat("Downloading High Resolution Settlement Layer (HRSL)...")
-httr::GET(url = "https://ciesin.columbia.edu/repository/hrsl/hrsl_civ_v1.zip", write_disk("/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1.zip"))
-cat("Downloading OK...")
-unzip("/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1.zip",exdir="/home/ptaconet/Documents/react/data_CIV/hrsl_civ_v1")
+# - pedology
+# - pistes -> comment on les choppe ? Uniquement les routes principales ou aussi les petits sentiers ? 
 
 # - night ligths : either dynamic (VNP46 products) or static (NASA 2013 dataset)
 
@@ -1221,6 +1315,10 @@ while (is.null(records)){
 ########################################################################################################################
 ############ Close the workflow ############
 ########################################################################################################################
+
+# Remove grass temporary folder
+system(paste0("rm -r ", file.path(getwd(),"GRASS_TEMP")))  
+file.remove(file.path(getwd(),".grassrc7"))
 
 #### stop cluster ####
 #stopCluster(cl)
