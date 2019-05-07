@@ -11,10 +11,10 @@
 -- db version : 5
 
 SELECT
-menage.codemenage_pk as codemenage, count(codeindividu_pk) as population, menage.Latitude as latitude,menage.Longitude as longitude,village.codevillage_pk as village,village.codepays_fk
+menage.codemenage_pk as codemenage, count(codeindividu_pk) as population, menage.Latitude as latitude,menage.Longitude as longitude, village.codevillage_pk as village,village.codepays_fk
 FROM
 individu
 JOIN menage on individu.codemenage_fk=menage.codemenage_pk
 JOIN village on village.codevillage_pk=menage.codevillage_fk
 GROUP BY individu.codemenage_fk,menage.codemenage_pk,menage.Latitude,menage.Longitude,village.codevillage_pk,village.codepays_fk
-ORDER BY menage.codemenage_pk
+ORDER BY village.codevillage_pk
