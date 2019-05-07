@@ -1,3 +1,3 @@
 hlc_dates : Dates of each human landing catch (HLC) and the associated mission number for each country
 hlc_dates_location : Dates and location of each human landing catch (HLC)
-population_villages : Population of each village
+loc_pop_households : Location, population and village of each household. Data extracted from the census made in the frame of the project.
