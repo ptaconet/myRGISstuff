@@ -35,7 +35,7 @@ path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with gra
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
 path_to_database<-"/home/ptaconet/Bureau/react.db"  
 path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
-path_to_sql_query_population<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/population_villages.sql"
+path_to_sql_query_households_loc_pop<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
 path_to_csv_population<-NULL
@@ -69,6 +69,7 @@ library(sf)
 library(sp)
 library(gdalUtils)
 library(rgdal)
+require(rgeos)
 require(httr)
 require(RSQLite)
 require(dplyr)
@@ -247,14 +248,8 @@ react_db <- dbConnect(RSQLite::SQLite(),path_to_database)
 # Get query to retrieve dates and locations of human landing catches and execute it. The query is stored on my github repository
 sql_query_hlc_dates_location<-paste(readLines(path_to_sql_query_dates_loc_hlc), collapse="\n")
 df_dates_locations_hlc<-dbGetQuery(react_db, sql_query_hlc_dates_location)
-# Get query to retrieve the population of the villages and execute it. The query is stored on my github repository
-sql_query_population_villages<-paste(readLines(path_to_sql_query_population), collapse="\n")
-df_population_villages<-dbGetQuery(react_db, sql_query_population_villages)
-# Close connection
-dbDisconnect(react_db)
 } else {
   df_dates_locations_hlc<-read.csv(path_to_csv_dates_loc)
-  df_population_villages<-read.csv(path_to_csv_population)
 }
 
 ## Filter data only for CIV
@@ -360,10 +355,10 @@ dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locati
 
 
 ##########################################################################
-########### A.2 Settlements ###############
+########### A.2 Settlements and population ###############
 ##########################################################################
 
-## Note: we could have derived the settlements by computing a texture indice on the VHR satellite image (Spot6) and applying a threshold, as some texture catch the houses very well. However, after visual comparison between the SPOT6 image and the HRSL dataset, we decided to use the HRSL dataset as it seems good enough to locate the houses.
+## Note: to get the location of each house, we could have computed a texture indice using the VHR satellite image (Spot6) and applying a threshold, as some texture catch the houses very well. However, after visual comparison between the SPOT6 image and the HRSL dataset, we decided to use the HRSL dataset as it seems good enough to locate the houses.
 
 ## Variables : surface built, shape indices
 
@@ -371,24 +366,97 @@ dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locati
 ########### A.2.1 Download the data ###############
 #####################################
 
+## Settlements : 
+# Download the HRSL dataset
 path_to_hrsl_zip<-file.path(path_to_hrsl_folder,gsub(".*(.*)/","\\1",url_to_hrsl_dataset))
 if (!(file.exists(path_to_hrsl_zip))){
   httr::GET(url_to_hrsl_dataset,write_disk(path_to_hrsl_zip))
   unzip(path_to_hrsl_zip,exdir = path_to_hrsl_folder)
 }
 
+## Location and population of households :
+
+# Output is a data.frame with columns:
+# - population = population in the household (numeric)
+# - latitude = latitude of the household (numeric)
+# - longitude = longitude of the household (numeric)
+# - village = village name (or code) (character)
+
+# Query DB 
+sql_query_households_loc_pop<-paste(readLines(path_to_sql_query_households_loc_pop), collapse="\n")
+df_households_loc_pop<-dbGetQuery(react_db, sql_query_households_loc_pop)
+# Tidy the dataset
+df_households_loc_pop <- df_households_loc_pop %>% filter (!is.na(latitude)) %>% filter (latitude!="")
+df_households_loc_pop$latitude <- as.numeric(gsub(",",".",df_households_loc_pop$latitude))
+df_households_loc_pop$longitude <- as.numeric(gsub(",",".",df_households_loc_pop$longitude))
+df_households_loc_pop$codemenage<-df_households_loc_pop$codepays_fk<-NULL
+
+
 #####################################
 ########### A.2.1 Prepare the data ###############
 #####################################
 
-# Open and crop to ROI settlement raster file
+## Turn location and population of households to SpatialPointsDataFrame
+df_households_loc_pop_sp<-SpatialPointsDataFrame(coords=data.frame(df_households_loc_pop$longitude,df_households_loc_pop$latitude),data=df_households_loc_pop,proj4string=CRS("+init=epsg:4326"))
+
+## Get population of each village (from the census dataset)
+df_households_village_pop<-df_households_loc_pop %>% group_by(village) %>% summarize(population=sum(population)) 
+
+## Get convex hull polygon for each village. We consider the convex hull as the edges of the village. The convex hull is the minimum polygon that encompasses all the locations of the households.  (code from https://stackoverflow.com/questions/25606512/create-convex-hull-polygon-from-points-and-save-as-shapefile)
+villages<-unique(df_households_loc_pop$village)
+ps_list<-NULL
+for (i in 1:length(villages)){
+  this_village<-villages[i]
+  df_households_loc_pop_this_village<-df_households_loc_pop %>% filter(village==this_village)
+  dat <- as.matrix(data.frame(df_households_loc_pop_this_village$longitude,df_households_loc_pop_this_village$latitude))
+  ch<-chull(dat)
+  coords <- dat[c(ch, ch[1]), ]  # closed polygon
+  p = Polygon(coords)
+  ps = Polygons(list(p),i)
+  ps_list<-c(ps_list,ps)
+}
+
+spatialpoly<-as.SpatialPolygons.PolygonsList(ps_list,CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
+df_villages_loc_pop_sp<-SpatialPolygonsDataFrame(spatialpoly,df_households_village_pop)
+df_villages_loc_pop_sp<-raster::crop(df_villages_loc_pop_sp,roi_sp_4326)
+
+## Get area (in m2) and population density (pers / m2) of each village
+df_villages_loc_pop_sp$area<-raster::area(df_villages_loc_pop_sp)
+df_villages_loc_pop_sp$pop_density<-df_villages_loc_pop_sp$population/df_villages_loc_pop_sp$area
+
+## Finally link to dataset of dates and locations of HLC
+dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,as.data.frame(df_villages_loc_pop_sp),by="village")
+
+## Get distance from each catch point to the edge of the village (from https://stackoverflow.com/questions/28382949/finding-the-minimum-distance-between-all-points-and-the-polygon-boundary)
+dates_locations_hlc_sp$dist_to_edge_vill<-0
+for (i in 1:nrow(dates_locations_hlc_sp)){
+  df_villages_loc_pop_sp_th_point<-df_villages_loc_pop_sp[which(df_villages_loc_pop_sp$village==dates_locations_hlc_sp$village[i]),]
+  df_villages_loc_pop_sp_th_point<-spTransform(df_villages_loc_pop_sp_th_point,CRS(paste0("+init=epsg:",epsg)))
+  dates_locations_hlc_sp_th_point<-spTransform(dates_locations_hlc_sp[i,],CRS(paste0("+init=epsg:",epsg)))
+  dates_locations_hlc_sp$dist_to_edge_vill[i]<-round(as.numeric(rgeos::gDistance(dates_locations_hlc_sp_th_point, as(df_villages_loc_pop_sp_th_point, "SpatialLines"), byid = TRUE)))
+}
+
+
+
+
+
+
+
+
+
+
+## Open and crop to ROI settlement raster file
 path_settlements_rast<-list.files(path_to_hrsl_folder,pattern = "settlement.tif",full.names = T)[1]
 settlements_rast<-raster(path_settlements_rast)
 settlements_rast<-crop(settlements_rast,roi_sp_4326)
 names(settlements_rast)<-"settlement_surf"
 
-# Get the surface built in the village (buffer of 300 m around the HLC - we consider that a village is not more than this size)
-dates_locations_hlc_sp <- raster::extract(settlements_rast, dates_locations_hlc_sp, buffer=300,fun=sum, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+# Get the surface built in the village
+surf_built <- raster::extract(settlements_rast, df_villages_loc_pop_sp,fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
+df_villages_loc_pop_sp$surf_built<-surf_built$settlement_surf
+# Get population density in the village (pers / m2)
+df_villages_loc_pop_sp$pop_density<-df_villages_loc_pop_sp$population/df_villages_loc_pop_sp$surf_built
 # We put the surface of the village in m2. 1 pixel is 30m*30m
 dates_locations_hlc_sp$settlement_surf<-dates_locations_hlc_sp$settlement_surf*30^2
 
@@ -402,7 +470,7 @@ dates_locations_hlc_sp$settlement_surf<-dates_locations_hlc_sp$settlement_surf*3
 
 ## Variables : total population in the village, population density
 # Population
-dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,df_population_villages,by="village")
+dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,df_households_loc_pop,by="village")
 
 # Population density (pers / m2 of built surface)
 dates_locations_hlc_sp$population_density<-dates_locations_hlc_sp$settlement_surf/dates_locations_hlc_sp$population
@@ -1319,6 +1387,9 @@ while (is.null(records)){
 # Remove grass temporary folder
 system(paste0("rm -r ", file.path(getwd(),"GRASS_TEMP")))  
 file.remove(file.path(getwd(),".grassrc7"))
+
+# Close the connection to the database
+dbDisconnect(react_db)
 
 #### stop cluster ####
 #stopCluster(cl)
