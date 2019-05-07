@@ -45,7 +45,8 @@ password_EarthData<-"HHKcue51"  #<EarthData password>
 
 # URLs or paths to static data
 url_to_srtm_datasets<-c("http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N09W006.SRTMGL1.hgt.zip","http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N08W006.SRTMGL1.hgt.zip") # for BF : http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N10W004.SRTMGL1.hgt.zip   # Check tiles at : https://dwtkns.com/srtm30m/
-url_to_hrsl_dataset<-"https://ciesin.columbia.edu/repository/hrsl/hrsl_civ_v1.zip" # for BF: "https://ciesin.columbia.edu/repository/hrsl/hrsl_bfa_v1.zip"
+path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4.TIF"  # this file was computed from the Spot 6 image using Orfeo Toolbox (application HaralickTextureExtraction). The inertia texture was computed on a 5 x 5 pixel moving window
+threshold_built_areas<-3 # for CIV : 3 ; for BF : 2.2
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
 
 
@@ -358,21 +359,16 @@ dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locati
 ########### A.2 Settlements and population ###############
 ##########################################################################
 
-## Note: to get the location of each house, we could have computed a texture indice using the VHR satellite image (Spot6) and applying a threshold, as some texture catch the houses very well. However, after visual comparison between the SPOT6 image and the HRSL dataset, we decided to use the HRSL dataset as it seems good enough to locate the houses.
-
 ## Variables : surface built, shape indices
 
 #####################################
-########### A.2.1 Download the data ###############
+########### A.2.1 Open the data ###############
 #####################################
 
-## Settlements : 
-# Download the HRSL dataset
-path_to_hrsl_zip<-file.path(path_to_hrsl_folder,gsub(".*(.*)/","\\1",url_to_hrsl_dataset))
-if (!(file.exists(path_to_hrsl_zip))){
-  httr::GET(url_to_hrsl_dataset,write_disk(path_to_hrsl_zip))
-  unzip(path_to_hrsl_zip,exdir = path_to_hrsl_folder)
-}
+## Surface built
+inertia_texture<-raster(path_to_texture_inertia)
+names(inertia_texture)<-"built_surf"
+
 
 ## Location and population of households :
 
@@ -396,9 +392,13 @@ df_households_loc_pop$codemenage<-df_households_loc_pop$codepays_fk<-NULL
 ########### A.2.1 Prepare the data ###############
 #####################################
 
+### Extract information : population in each village, population density, built surface, distance from each catch point to the edge of the village
+
 ## Turn location and population of households to SpatialPointsDataFrame
 df_households_loc_pop_sp<-SpatialPointsDataFrame(coords=data.frame(df_households_loc_pop$longitude,df_households_loc_pop$latitude),data=df_households_loc_pop,proj4string=CRS("+init=epsg:4326"))
-
+df_households_loc_pop_sp<-raster::crop(df_households_loc_pop_sp,extent(roi_sp_4326))
+df_households_loc_pop<-as.data.frame(df_households_loc_pop_sp)
+  
 ## Get population of each village (from the census dataset)
 df_households_village_pop<-df_households_loc_pop %>% group_by(village) %>% summarize(population=sum(population)) 
 
@@ -418,14 +418,40 @@ for (i in 1:length(villages)){
 
 spatialpoly<-as.SpatialPolygons.PolygonsList(ps_list,CRS("+proj=longlat +datum=WGS84 +no_defs +ellps=WGS84 +towgs84=0,0,0"))
 df_villages_loc_pop_sp<-SpatialPolygonsDataFrame(spatialpoly,df_households_village_pop)
-df_villages_loc_pop_sp<-raster::crop(df_villages_loc_pop_sp,roi_sp_4326)
 
 ## Get area (in m2) and population density (pers / m2) of each village
 df_villages_loc_pop_sp$area<-raster::area(df_villages_loc_pop_sp)
 df_villages_loc_pop_sp$pop_density<-df_villages_loc_pop_sp$population/df_villages_loc_pop_sp$area
 
+## Get the surface built in each village
+# We use the haralick correlation texture file calculated with the Spot 6 image. The pixels with value > threshold_built_areas (26000 for CIV) are considered as built surfaces (visual thresholding), other values are unbuilt surfaces.
+
+df_villages_loc_pop_sp$built_surf<-0
+for (i in 1:length(villages)){
+  df_villages_loc_pop_sp_th_village<-df_villages_loc_pop_sp[which(df_villages_loc_pop_sp$village==villages[i]),]
+  df_villages_loc_pop_sp_th_village<-spTransform(df_villages_loc_pop_sp_th_village,CRS(paste0("+init=epsg:",epsg)))
+  inertia_this_village<-raster::crop(inertia_texture,df_villages_loc_pop_sp_th_village)
+  inertia_this_village[inertia_this_village<=threshold_built_areas]<-NA
+  inertia_this_village[inertia_this_village>threshold_built_areas]=1
+  df_villages_loc_pop_sp_th_village <- raster::extract(inertia_this_village, df_villages_loc_pop_sp_th_village,fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
+  df_villages_loc_pop_sp$built_surf[which(df_villages_loc_pop_sp$village==villages[i])]<-df_villages_loc_pop_sp_th_village$built_surf
+}
+
+# Note: to do the same thing we could have done the way here-under, easier. However the raster is very big, hence the step inertia_texture[inertia_texture<=3]<-NA takes too long. Hence we do it the 'nasty' (ie loop) way
+#inertia_texture[inertia_texture<=3]<-NA
+#inertia_texture[inertia_texture>3]=1
+#df_villages_loc_pop_sp <- raster::extract(inertia_texture, df_villages_loc_pop_sp,fun=sum, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+# We put the built surface in m2. 1 pixel is 1.57 m * 1.57 m (res(inertia_texture))
+df_villages_loc_pop_sp$built_surf<-df_villages_loc_pop_sp$built_surf*res(inertia_texture)[1]^2
+
+# Compute built-up density
+df_villages_loc_pop_sp$built_density<-df_villages_loc_pop_sp$built_surf/df_villages_loc_pop_sp$area
+
 ## Finally link to dataset of dates and locations of HLC
 dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,as.data.frame(df_villages_loc_pop_sp),by="village")
+
+
 
 ## Get distance from each catch point to the edge of the village (from https://stackoverflow.com/questions/28382949/finding-the-minimum-distance-between-all-points-and-the-polygon-boundary)
 dates_locations_hlc_sp$dist_to_edge_vill<-0
@@ -437,43 +463,7 @@ for (i in 1:nrow(dates_locations_hlc_sp)){
 }
 
 
-
-
-
-
-
-
-
-
-## Open and crop to ROI settlement raster file
-path_settlements_rast<-list.files(path_to_hrsl_folder,pattern = "settlement.tif",full.names = T)[1]
-settlements_rast<-raster(path_settlements_rast)
-settlements_rast<-crop(settlements_rast,roi_sp_4326)
-names(settlements_rast)<-"settlement_surf"
-
-
-# Get the surface built in the village
-surf_built <- raster::extract(settlements_rast, df_villages_loc_pop_sp,fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
-df_villages_loc_pop_sp$surf_built<-surf_built$settlement_surf
-# Get population density in the village (pers / m2)
-df_villages_loc_pop_sp$pop_density<-df_villages_loc_pop_sp$population/df_villages_loc_pop_sp$surf_built
-# We put the surface of the village in m2. 1 pixel is 30m*30m
-dates_locations_hlc_sp$settlement_surf<-dates_locations_hlc_sp$settlement_surf*30^2
-
-
-
-
-
-##########################################################################
-########### A.3 Population ###############
-##########################################################################
-
-## Variables : total population in the village, population density
-# Population
-dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,df_households_loc_pop,by="village")
-
-# Population density (pers / m2 of built surface)
-dates_locations_hlc_sp$population_density<-dates_locations_hlc_sp$settlement_surf/dates_locations_hlc_sp$population
+## Get an indice of the shape of the village (is is dense ? spread ? ). For this we use the locations of the households
 
 
 
