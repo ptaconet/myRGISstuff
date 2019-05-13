@@ -13,16 +13,7 @@
 # Extract the data (i.e. compute zonal statistics) on a buffer around the villages
 
 
-########## Specific for ERA INTERIM (instructions to install the clients and use the python environment, more info here : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/#era-interim)
-##Set virtual env and install the python ECMWF API
-#reticulate::py_install("ecmwf-api-client") #(from https://community.rstudio.com/t/problem-installing-python-libraries-with-reticulate-py-install-error-pip-not-found/26561/2)
-#system("virtualenv -p /usr/bin/python2 /home/ptaconet/.virtualenvs/py2-virtualenv")
-##Also works with this: virtualenv_create("py3-virtualenv", python = "/usr/bin/python3")
-#reticulate::use_virtualenv("py2-virtualenv")
-##install the python ECMWF API
-#reticulate::py_install("ecmwf-api-client", envname = "py2-virtualenv")
-## For ERA-5 :
-#system("pip install cdsapi")
+
 
 #### Start Workflow
 ########################################################################################################################
@@ -33,30 +24,32 @@
 path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
+path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file containing the credential to the NASA servers (EarthData)
 
-## Sources of data to model (mosquito presence and abundance)
+## Sources of the data to model (mosquito presence and abundance)
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
 path_to_database<-"/home/ptaconet/Bureau/react.db"  
 path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
-path_to_csv_population<-NULL
 
-## Sources of data and use or not to build the model
-source_dem<-"SRTM"  # Source for the Digital Elevation Model. Available choices: {"SRTM"}
-source_settlements_pop<-"own" # Source for the settlements ond population. TODO : implement with HRSL
-source_roads<-"own"  # Source for the raod network. TODO : implement with OSM
-source_pedology<-"own"
-source_lu_lc<-"own"   # Source for the land use / land cover. TODO : implement with MODIS Land Use / Land Cover 
-source_temperature<-"MODIS_LST"
-source_vegetation_indices<-"MODIS_VEGET"
-source_evapotranspiration<-"MODIS_EVAPO"
+
+## Sources of data and use or not to build the model. 
+## For now the only source where the user has more than 1 choice is the rainfall
+#source_dem<-"SRTM"  # Source for the Digital Elevation Model. Available choices: {"SRTM"}
+#source_settlements_pop<-"own" # Source for the settlements ond population. TODO : implement with HRSL
+#source_roads<-"own"  # Source for the raod network. TODO : implement with OSM
+#source_pedology<-"own"
+#source_lu_lc<-"own"   # Source for the land use / land cover. TODO : implement with MODIS Land Use / Land Cover 
+#source_temperature<-"MODIS_LST"
+#source_vegetation_indices<-"MODIS_VEGET"
+#source_evapotranspiration<-"MODIS_EVAPO"
 source_rainfall<-"GPM"  # {"GPM","TAMSAT"}
-source_wind<-"ERA5"
-source_moon<-"IMCCE"
-source_nightlights<-"VIIRS"
+#source_wind<-"ERA5"
+#source_moon<-"IMCCE"
+#source_nightlights<-"VIIRS"
 
-# Use or not in the modeling ? 
+# Use data or not ? 
 use_dem<-TRUE
 use_settlements_pop<-TRUE
 use_roads<-TRUE
@@ -70,33 +63,40 @@ use_wind<-TRUE
 use_moon<-TRUE
 use_nightlights<-TRUE
 
-  
-## Additional info to set for the input data
+
+## Additional info to set for each source input data
 # For DEM 
-srtm_tiles<-c("N08W006","N09W006")
+srtm_tiles<-c("N08W006","N09W006")  # TODO automatize in a future dev
 # For population and settlements
 path_to_sql_query_households_loc_pop<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
 path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4.TIF"  # this file was computed from the Spot 6 image using Orfeo Toolbox (application HaralickTextureExtraction). The inertia texture was computed on a 5 x 5 pixel moving window
 threshold_built_areas<-3 # for CIV : 3 ; for BF : 2.2
+path_to_csv_population<-NULL
 # For LU/LC
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
+buffer_sizes_lulc_meters<-c(1000,2000)
 # For pedology
 path_to_pedology_dataset<-"pedology/pedo_final.tif"
 hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are considered hydromorphic.   for CIV: c(11,14,5,2,13)  for BF: c(2,3,8,9,10)
 # For road network
-#TODO
+path_to_road_network<-""
+# For the raifall
+resample_rainfall<-TRUE
+size_output_grid_resample_rainfall<-250 # if resample_rainfall is TRUE : size of output grid after bilinear resampling (in meters)
+# For the wind
+resample_wind<-TRUE
+size_output_grid_resample_wind<-250 # if resample_wind is TRUE : size of output grid after bilinear resampling (in meters)
 
-## Buffer size, within which the raster statistics will be computed (radius in meters)
+
+## Additional paramters to set for integration of the data 
+# Buffer size, within which the raster statistics will be computed (radius in meters)
 buffer_size_meters=2000 
-## Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
-lag_days_modis_lst<-40
-lag_days_modis_veget<-40
-lag_days_modis_evapo<-40
-lag_days_gpm<-40
+# Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
+lag_max_days_temperature<-40
+lag_max_days_veget_indices<-40
+lag_max_days_evapotranspiration<-40
+lag_max_days_rainfall<-40
 
-## Credential to the NASA servers (EarthData)
-username_EarthData<-"ptaconet"  #<EarthData username>
-password_EarthData<-"HHKcue51"  #<EarthData password>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -129,6 +129,21 @@ require(spatstat)
 #library(doParallel)
 #library(foreach)
 
+########## Specific for ERA INTERIM (instructions to install the clients and use the python environment, more info here : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/#era-interim)
+##Set virtual env and install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client") #(from https://community.rstudio.com/t/problem-installing-python-libraries-with-reticulate-py-install-error-pip-not-found/26561/2)
+#system("virtualenv -p /usr/bin/python2 /home/ptaconet/.virtualenvs/py2-virtualenv")
+##Also works with this: virtualenv_create("py3-virtualenv", python = "/usr/bin/python3")
+#reticulate::use_virtualenv("py2-virtualenv")
+##install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client", envname = "py2-virtualenv")
+## For ERA-5 :
+#system("pip install cdsapi")
+######################################################""
+
+## Set working directory
+setwd(path_to_processing_folder)
+
 ## Urls to the various OpenDAP servers
 url_modis_opendap<-"https://opendap.cr.usgs.gov/opendap/hyrax"
 url_gpm_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
@@ -144,6 +159,9 @@ modis_evapo_aqua_collection<-"MYD16A2.006"
 modis_crs="+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs"
 
 ## Connection to the EarthData servers
+earthdata_credentials<-readLines(path_to_earthdata_credentials)
+username_EarthData<-strsplit(earthdata_credentials,"=")[[1]][2]
+password_EarthData<-strsplit(earthdata_credentials,"=")[[2]][2]
 httr::set_config(authenticate(user=username_EarthData, password=password_EarthData, type = "basic"))
 
 ## Parameters for download of ERA 5 data
@@ -175,7 +193,7 @@ fun_preprocess_modis_product<-function(path_to_raw_modis,var_name){
 }
 
 # To preprocess ERA-5 products
-fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,roi_sp_utm,epsg,size_output_grid){
+fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,roi_sp_utm,epsg,resample,size_output_grid){
   # Open netcdf
   nc <- nc_open(path_to_output_erawind_data)
   # Get lat and lon
@@ -198,22 +216,20 @@ fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,r
     variable_rast <- raster(t(variable[,,i]), xmn=min(lon)-0.125, xmx=max(lon)+0.125, ymn=min(lat)-0.125, ymx=max(lat)+0.125, crs=CRS("+init=epsg:4326"))
     variable_rast <- projectRaster(variable_rast, crs = CRS(paste0("+init=epsg:",epsg)))
     # Resample to size_output_grid size 
-    #size_output_grid<-250
+    if(resample){
     r<-variable_rast
     res(r)<-c(size_output_grid,size_output_grid)
-    variable_rast_resamp<-resample(variable_rast,r,method='bilinear')
+    variable_rast<-resample(variable_rast,r,method='bilinear')
+    }
     # Crop to ROI
-    variable_rast_resamp<-crop(variable_rast_resamp,roi_sp_utm)
+    variable_rast<-crop(variable_rast,roi_sp_utm)
     # Add to brick
-    brick_era<-c(brick_era,variable_rast_resamp)
+    brick_era<-c(brick_era,variable_rast)
   }
   
   return(brick_era)
 }
 
-
-## Set working directory
-setwd(path_to_processing_folder)
 
 ## Set the paths of output folders / files and create them
 path_to_dem_folder<-file.path(path_to_processing_folder,"DEM_SRTM") # Path to the folder where the DEM raw data will be stored
@@ -251,7 +267,7 @@ coordinates = SpatialPoints(t(bbox(roi_sp_4326)), CRS('+proj=longlat +datum=WGS8
 modis_tile = as.character(raster::extract(tiles,coordinates)$Name)
 
 if(length(unique(modis_tile))>1){
-  cat("Your ROI is overlapping more than 1 MODIS tile. This workflow is currently not adapted for this case\n")
+  stop("Your ROI is overlapping more than 1 MODIS tile. This workflow is currently not adapted for this case\n")
 } else {
   modis_tile<-unique(modis_tile)
   modis_tile=gsub(" ","",modis_tile)
@@ -303,23 +319,30 @@ dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locati
 bbox_hlc<-bbox(dates_locations_hlc_sp)
 bbox_roi<-bbox(roi_sp_4326)
 if (bbox_hlc[1,1]<bbox_roi[1,1]|bbox_hlc[1,2]>bbox_roi[2,1]|bbox_hlc[2,1]<bbox_roi[2,1]||bbox_hlc[2,2]>bbox_roi[2,2]){
-  stop("Some points of your HLC data lie outside of the ROI")
+  stop("Some points of your HLC data lie outside of the ROI\n")
 }
 
 # To delete when the coordinates of the points are validated
 dates_locations_hlc_sp<-crop(dates_locations_hlc_sp,extent(roi_sp_4326))
 
 
-
-
 ###############################################################################################################
 ############################### A. Static data ################################
 ###############################################################################################################
+cat("A. Integrating Static data ...\n")
 
+  
 ##########################################################################
 ########### A.1 DEM and DEM-derivatives ###############
 ##########################################################################
-
+if (use_dem){
+  cat(" A.1. Integrating DEM and DEM derivatives data ...\n")
+  
+#####################################
+########### A.1.1 Download the data ###############
+#####################################
+cat("  A.1.1. Downloading DEM data ...\n")
+  
 # Set output paths
 dem_output_path<-file.path(path_to_dem_folder,"DEM.tif")
 slope_output_path<-file.path(path_to_dem_folder,"slope.tif")
@@ -328,9 +351,7 @@ accumulation_output_path<-file.path(path_to_dem_folder,"accumulation.tif")
 tci_output_path<-file.path(path_to_dem_folder,"tci.tif") 
 twi_output_path<-file.path(path_to_dem_folder,"twi.tif") 
 
-#####################################
-########### A.1.1 Download the data ###############
-#####################################
+
 for (i in 1:length(srtm_tiles)){
   #srtm_tile_name<-gsub(".*(.*)/","\\1",srtm_tiles[i])
   srtm_tile_name<-paste0(srtm_tiles[i],".SRTMGL1.hgt.zip")
@@ -341,16 +362,25 @@ for (i in 1:length(srtm_tiles)){
   }
 }
 
+#####################################
+########### A.1.2 Prepare the data ###############
+#####################################
+cat("  A.1.2. Preparing DEM and DEM-derivatives data ...\n")
+
+# extract indices from the DEM : slope, aspect, flow accumulation, topographic convergence index ####
+
+## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
+
 # Merge, crop and reproject to UTM the rasters
 if (!(file.exists(dem_output_path))){
   path_to_srtm_tiles<-list.files(path_to_dem_folder,pattern = "hgt",full.names = T)
-
+  
   s <- lapply(path_to_srtm_tiles, stack)
   m <- do.call(merge, s)
   m <- crop(m,roi_sp_4326)
-
+  
   writeRaster(m,file.path(path_to_dem_folder,"DEM.tif"))
-
+  
   # Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
   gdalwarp(srcfile=dem_output_path,dstfile=gsub("DEM.tif","DEM_temp.tif",dem_output_path),dstnodata=0,t_srs=paste0("+proj=utm +zone=",utm_zone_number," +datum=WGS84 +units=m +no_defs"))
   file.remove(dem_output_path)
@@ -358,13 +388,6 @@ if (!(file.exists(dem_output_path))){
   
 }
 
-#####################################
-########### A.1.2 Prepare the data ###############
-#####################################
-
-# extract indices from the DEM : slope, aspect, flow accumulation, topographic convergence index ####
-
-## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
 
 if(!file.exists(slope_output_path)|!file.exists(aspect_output_path)|!file.exists(accumulation_output_path)|!file.exists(tci_output_path)|!file.exists(twi_output_path)){
   # Import DEM to GRASS and set region
@@ -390,16 +413,26 @@ if(!file.exists(slope_output_path)|!file.exists(aspect_output_path)|!file.exists
 dem_and_derivatives_rast <- brick(list(dem_output_path,slope_output_path,aspect_output_path,accumulation_output_path,tci_output_path,twi_output_path))
 names(dem_and_derivatives_rast)[1]<-"elevation"
 
+
+#####################################
+########### A.1.3 Calculate stats within the buffer ###############
+#####################################
+cat("  A.1.3. Calculating DEM and DEM-derivatives data statistics within the buffer...\n")
 # calculate the stats within the buffer. First convert HLC dataset to UTM proj . EDIT : for the accumulation, might be interesting to also extract the maximum
 dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,CRS(paste0("+init=epsg:",epsg)))
 dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=FALSE) 
 ##### WARNING : the function raster::extract can produce error that are not visible (ie no error is returned) if points are outside the raster extent. It is very important to check that at least one raster cell is intersected
 
+cat("END integration DEM and DEM-derivatives data")
+}
 
 ##########################################################################
 ########### A.2 Settlements and population ###############
 ##########################################################################
 
+if (use_settlements_pop){
+  cat(" A.2. Integrating settlements and populations data ...\n")
+  
 #####################################
 ########### A.2.1 Open the data ###############
 #####################################
@@ -427,8 +460,9 @@ df_households_loc_pop$codemenage<-df_households_loc_pop$codepays_fk<-NULL
 
 
 #####################################
-########### A.2.1 Prepare the data ###############
+########### A.2.1 Prepare the data and calculate the stats within the buffer ###############
 #####################################
+cat("   A.2.1. Preparing settlments and population data and calculating statistics within the buffer...\n")
 
 ### Extract information : population in each village, population density, built surface, distance from each catch point to the edge of the village
 
@@ -508,46 +542,76 @@ for (i in 1:length(villages)){
   dates_locations_hlc_sp$dispersion_index[which(dates_locations_hlc_sp$village==villages[i])]<-clark_index
 }
 
+cat("END integration of settlements and populations data \n")
+}
 
 ##########################################################################
-########### A.4 Pedology ###############
+########### A.3 Pedology ###############
 ##########################################################################
 
 # en CIV les sols hydromorphes sont considérés comme les unités 6,14,17,20,22 de la carte originelle. Sur notre raster sela correspond respectivement aux pixels classés 11,14,5,2,13 
 # au BF les sols hydromorphes sont les pixels classés 2,3,8,9
+if(use_pedology){
+  cat(" A.3 Integrating pedology data ...\n")
 
 #####################################
-########### A.4.1 Prepare the data ###############
+########### A.3.1 Open the data ###############
 #####################################
-
+cat("   A.3.2. Opening pedology data ...\n")
 # Open the raster
 pedology_raster<-raster(path_to_pedology_dataset)
 
+#####################################
+########### A.3.2 Prepare the data ###############
+#####################################
+cat("   A.3.2. Preparing pedology data ...\n")
 # Set to NA classes that are not hydromorphic and to 1 the classes that are hydromorphic
 pedology_raster[!(pedology_raster %in% hydromorphic_classes_pixels)]<-NA
 pedology_raster[!is.na(pedology_raster)]<-1
 
-# Compute statistics
-
+#####################################
+########### A.3.3 Calculate stats within the buffer ###############
+#####################################
 # Turn stat to surface (km2) by mutiplying by the surface of a cell
+cat("   A.3.3. Calculating pedology data statistics within the buffer...\n")
 
+cat("END integration pedology data")
+} 
 
 ##########################################################################
-########### A.5 Land use / land cover ###############
+########### A.4 Land use / land cover ###############
 ##########################################################################
 
+if(use_lu_lc){
+  cat(" A.4 Integrating land use / land cover data ...\n")
+  
 #####################################
-########### A.5.1 Prepare the data ###############
+########### A.4.1 Open the data ###############
 #####################################
 
+    
+#####################################
+########### A.4.2 Prepare the data ###############
+#####################################
+
+
+
+#####################################
+########### A.4.3 Calculate stats within the buffer ###############
+#####################################
+
+  cat("END integration land use / land cover data\n")
+}
+
+cat("END integration static data \n")
 
 ###############################################################################################################
 ############################### B. Dynamic data ################################
 ###############################################################################################################
+cat("B. Integrating dynamic data ... \n")
 
 ## Get all dates
 all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
-
 
 ## For tests: retrieve all the lines for the first date
 i=20
@@ -700,17 +764,14 @@ index_opendap_modislst_lat_min<-which.min(abs(opendap_modis_lst_YDim_index-roi_b
 #index_opendap_modisveget_lat_min<-4300
 
 
-########################################################################################################################
-
-########################################################################################################################
-############ Start Workflow ############
-########################################################################################################################
-cat("Starting workflow")
-
 
 #####################################
 ########### 1. Modis LST ###############
 #####################################
+
+if(use_temperature){
+  cat(" B.1. Integrating temperature data ...\n")
+  
 
 # Il y a deux résolutions temporelles disponibles: 1 jour et 8 jours. Pour chaque résolution temporelle il y a 2 fichiers disponibles: le fichier issu de Terra et le fichier issu de Aqua (relevés distants d'à peu près 2/3 h entre Terra et Aqua). Enfin pour chaque fichier il y a 2 relevés: température diurne et température nocturne. La différence entre Terra et Aqua est l'heure de relevé, ainsi que l'étendue des données disponibles (ie couverture nuageuse au moment de l'acquisition)
 
@@ -735,8 +796,6 @@ cat("Starting workflow")
 
 
 
-
-
 ## Thèse Nico :
 # - 7 jours. Il prend les données de la semaine de capture + 2 semaines précédentes. 
 # - stage Mader : moyenne sur les 7 jours aussi
@@ -744,11 +803,12 @@ cat("Starting workflow")
 
 ## For the quality control of MODIS layers : https://www.r-bloggers.com/modis-qc-bits/
 
+
 ##############################################################
-#### 1.1 - Download the data ####
+#### B.1.1 - Download the data ####
 ##############################################################
 
-dates_modis_lst <-seq(this_date_hlc,this_date_hlc-lag_days_modis_lst,-1)
+dates_modis_lst <-seq(this_date_hlc,this_date_hlc-lag_max_days_temperature,-1)
 
 # Function to build the OpenDap URL to dowload MODIS LST night and day 1km data. input parameters : date and satellite (terra or aqua)
 fun_build_modis_lst_opendap_url<-function(date_catch,satellite){
@@ -788,7 +848,7 @@ for (i in 1:length(dates_modis_lst)){
 
 
 ##############################################################
-#### 1.2 - Prepare the data ####
+#### B.1.2 - Prepare the data ####
 ##############################################################
 
 ## For each date before the d date:
@@ -835,6 +895,11 @@ names(brick_lst_night[[length(brick_lst_night)]])<-paste0("lst_min_",i-1)
 brick_lst_day<-brick(brick_lst_day)
 brick_lst_night<-brick(brick_lst_night)
 
+
+#####################################
+########### B.1.3 Calculate stats within the buffer ###############
+#####################################
+
 ## Extract mean of LST in a buffer of 2 km for all the dates
 # na.rm = TRUE means that NA values in the raster are not taken into account
 # small=TRUE means that each time the buffer intersects a non NA cell it takes into account the cell value
@@ -842,11 +907,15 @@ brick_lst_night<-brick(brick_lst_night)
 locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_day, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=count, na.rm=TRUE, sp=TRUE,small=TRUE) 
 locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_night, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
-
+}
 
 #####################################
-########### 2. Modis vegetation indices NDVI and EVI ###############
+########### B.2. Modis vegetation indices NDVI and EVI ###############
 #####################################
+
+if(use_vegetation_indices){
+  cat(" B.2. Integrating vegetation indices data ...\n")
+  
 
 ## Modis NDVI and EVI are 250 m / 16 days resolutions. We take the data 
 
@@ -864,11 +933,11 @@ locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_night, locati
 
 
 ##############################################################
-#### 2.1 - Download the data ####
+#### B.2.1 - Download the data ####
 ##############################################################
 
 # MODIS Veget are every 8 days
-date_modis_veget<-seq(this_date_hlc,this_date_hlc-lag_days_modis_veget,-8)
+date_modis_veget<-seq(this_date_hlc,this_date_hlc-lag_max_days_veget_indices,-8)
 
 ## Retrieve date and satellite of the week including the catch (i.e. closest start aquisition date from the catch date) and build the link to download the data
 # Function to build the OpenDap URL to dowload MODIS Vegetion indices NDVI and EVI 250m data. input parameters : date
@@ -947,7 +1016,7 @@ for (i in 1:length(date_modis_veget)){
 
 
 ##############################################################
-#### 2.2 - Prepare the data ####
+#### B.2.2 - Prepare the data ####
 ##############################################################
 
 brick_modisveget<-NULL
@@ -962,23 +1031,31 @@ for (i in 1:length(modisveget_list_paths)){
 
 brick_modisveget<-brick(brick_modisveget)
 
+#####################################
+########### B.2.3 Calculate stats within the buffer ###############
+#####################################
+
 # Extract mean of vegetation indices for each raster 
 dates_locations_hlc_sp_modis_proj <- raster::extract(brick_modisveget, dates_locations_hlc_sp_modis_proj, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
-
+cat("END integration vegetation indices data\n")
+}
 
 #####################################
-########### 3. Modis evapotranspiration ###############
+########### B.3. Modis evapotranspiration ###############
 #####################################
 
+if(use_evapotranspiration){
+  cat("  B.3. Integrating evapotranspiration data ...\n")
+  
 ##############################################################
-#### 3.1 - Download the data ####
+#### B.3.1 - Download the data ####
 ##############################################################
 
 ## Function to look for the closest date to the HLC and retrieve the corresponding OpenDAP time index
 ## MODIS evaporation are every 8 days, and both Terra and Aqua have the same dates (not as for Vegetation)
 
-dates_modis_evapo<-seq(this_date_hlc,this_date_hlc-lag_days_modis_evapo,-8)
+dates_modis_evapo<-seq(this_date_hlc,this_date_hlc-lag_max_days_evapotranspiration,-8)
 
 fun_build_modis_evapo_opendap_url<-function(date_catch,satellite){
   
@@ -1026,7 +1103,7 @@ for (i in 1:length(dates_modis_evapo)){
 
 
 ##############################################################
-#### 3.2 - Prepare the data ####
+#### B.3.2 - Prepare the data ####
 ##############################################################
 
 # Get Terra and Aqua products to preprocess 
@@ -1057,13 +1134,22 @@ for (i in 1:length(dates_modis_evapo_real)){
 
 brick_modisevapo<-brick(brick_modisevapo)
 
+#####################################
+########### B.3.3 Calculate stats within the buffer ###############
+#####################################
+
 locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
+cat("END integration evapotranspiration data\n")
+}
 
 #####################################
-########### 4. Rainfall ###############
+########### B.4. Rainfall ###############
 #####################################
 
+if(use_rainfall){
+  cat("  B.4. Integrating rainfall data ...\n")
+  
 ## GMP Websites
 # TRMM/GPM doc: https://disc2.gesdisc.eosdis.nasa.gov/data/TRMM_L3/TRMM_3B43/doc/README.TRMM_V7.pdf
 # TRMM/GPM products :https://pmm.nasa.gov/data-access/downloads/trmm
@@ -1088,12 +1174,12 @@ locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locat
 ## TAMSAT : https://www.tamsat.org.uk/data/archive 
 
 ##############################################################
-#### 4.1 - Download the data ####
+#### B.4.1 - Download the data ####
 ##############################################################
 
 # We retrieve the data 15 days before the date_epidemio_campain (source of the duration: thèse Nico)
 
-time_range<-as.character(c(this_date_hlc-lag_days_gpm,this_date_hlc))
+time_range<-as.character(c(this_date_hlc-lag_max_days_rainfall,this_date_hlc))
 dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
 
 # Function to build the OpenDap URL to dowload GPM 1km data. input parameters : date
@@ -1171,12 +1257,12 @@ for (i in 1:length(dates)){
 
 
 ##############################################################
-#### 4.2 - Prepare the data ####
+#### B.4.2 - Prepare the data ####
 ##############################################################
 
 cat("Processing rainfall data...\n")
 # For interpolation: 
-size_output_grid<-250 # in meters. In degrees : 
+size_output_grid_resample_rainfall<-250 # in meters. In degrees : 
 
 brick_rainfall<-NULL
 brick_rainfall_positive_precip<-NULL
@@ -1196,7 +1282,7 @@ for (i in 1:length(rainfall_list_paths)){
   } else if (source_rainfall=="TAMSAT") {
     
     # Convert output size grid (after interpolation) into degrees
-    size_output_grid<-fun_convert_meters_to_degrees(size_output_grid,mean_latitude)
+    size_output_grid_resample_rainfall<-fun_convert_meters_to_degrees(size_output_grid_resample_rainfall,mean_latitude)
     
     # extend a bit the size of the bbox
     bbox_tamsat<-extent(roi_sp_4326)
@@ -1210,9 +1296,10 @@ for (i in 1:length(rainfall_list_paths)){
     
   }
   
+  if (resample_rainfall){
   ### Interpolate 
   r<-rainfall_rast
-  res(r)<-c(size_output_grid,size_output_grid)
+  res(r)<-c(size_output_grid_resample_rainfall,size_output_grid_resample_rainfall)
   
   ## Using Inverse distance weighting. More info : https://pro.arcgis.com/fr/pro-app/help/analysis/geostatistical-analyst/how-inverse-distance-weighted-interpolation-works.htm
   #grd <- as(r, 'SpatialGrid')
@@ -1225,6 +1312,8 @@ for (i in 1:length(rainfall_list_paths)){
   ## Using resample (bilinear resampling, cf. http://desktop.arcgis.com/fr/arcmap/latest/extensions/spatial-analyst/performing-analysis/cell-size-and-resampling-in-analysis.htm)
   rainfall_rast<-resample(rainfall_rast,r,method='bilinear')
   
+  }
+  
   brick_rainfall<-c(brick_rainfall,rainfall_rast)
   #names(brick_rainfall[[length(brick_rainfall)]])<-gpm_list_names[i]
   
@@ -1236,7 +1325,7 @@ for (i in 1:length(rainfall_list_paths)){
 
 brick_rainfall<-brick(brick_rainfall)
 
-## Sum of the precipitations for the n days (on a 3 days moving window ?)
+## Sum of the precipitations for the n days (TODO on a 3 days moving window ?)
 precip_sum<-sum(v,na.rm = T)
 names(precip_sum)<-"precip_sum"
 ## Precipitation for the date of HLC
@@ -1246,16 +1335,25 @@ names(precip_0)<-"precip_0"
 precip_ndays<-sum(brick(brick_rainfall_positive_precip),na.rm = T)
 names(precip_ndays)<-"precip_ndays"
 
+#####################################
+########### B.4.3 Calculate stats within the buffer ###############
+#####################################
+
 # Extract mean of GPM for each raster
 locations_hlc_sp_this_date <- raster::extract(precip_sum, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 locations_hlc_sp_this_date <- raster::extract(precip_0, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 locations_hlc_sp_this_date <- raster::extract(precip_ndays, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
-
+cat("END integration rainfall data\n")
+}
 
 #####################################
-########### 5. Night lights ###############
+########### B.5. Night lights ###############
 #####################################
+
+if(use_nightlights){
+  cat("  B.5. Integrating night light data ...\n")
+  
 
 # info on data : https://ngdc.noaa.gov/eog/viirs/download_dnb_composites.html and https://noaa.maps.arcgis.com/home/item.html?id=d7c95b2da6fd43cd9dec19b212f145db
 
@@ -1266,7 +1364,7 @@ locations_hlc_sp_this_date <- raster::extract(precip_ndays, locations_hlc_sp_thi
 # NOAA VIIRS DNB Nighttime Lights Monthly Composites are monthly products. We download the data for the month of the HCL
 
 ##############################################################
-#### 5.1 - Download the data ####
+#### B.5.1 - Download the data ####
 ##############################################################
 
 date_start<-as.Date(paste0(substr(this_date_hlc,1,7),"-01"))
@@ -1291,7 +1389,7 @@ if (!file.exists(path_to_output_nighttime)){
 
 
 ##############################################################
-#### 5.2 - Prepare the data ####
+#### B.5.2 - Prepare the data ####
 ##############################################################
 
 # Open the data 
@@ -1304,12 +1402,23 @@ nighttime_rast <- mask(nighttime_rast, nighttime_cloudcover)
 
 # Extract mean of DNB radiance. However change the buffer size (500 m) ? 
 names(nighttime_rast)<-"nightligth_mean"
+
+#####################################
+########### B.5.3 Calculate stats within the buffer ###############
+#####################################
+
 locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
+cat("END integration night lights data\n")
+}
 
 #####################################
-########### 5. Wind (ERA) ###############
+########### B.6. Wind (ERA) ###############
 #####################################
+
+if(use_wind){
+  cat("  B.6. Integrating wind data ...\n")
+  
 # Check : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/
 
 # ERA 5 : https://cds.climate.copernicus.eu/cdsapp#!/dataset/reanalysis-era5-single-levels?tab=overview
@@ -1317,7 +1426,7 @@ locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_t
 # Description of the wind data: https://apps.ecmwf.int/codes/grib/param-db?id=165 and https://apps.ecmwf.int/codes/grib/param-db?id=166
 
 ##############################################################
-#### 5.1 - Download the data ####
+#### B.6.1 - Download the data ####
 ##############################################################
 
 bbox_4326<-bbox(spTransform(dates_locations_hlc_sp,CRS("+init=epsg:4326")))
@@ -1363,7 +1472,7 @@ server$retrieve("reanalysis-era5-single-levels",
                 path_to_output_erawind_data_this_date_plus_one)
 
 ##############################################################
-#### 5.2 - Prepare the data ####
+#### B.6.2 - Prepare the data ####
 ##############################################################
 
 # open path_to_output_erawind_data_this_date and preprocess each component (open each layer as raster (ie each hour), reproject to right epsg, resample, crop to ROI extent)
@@ -1372,14 +1481,14 @@ server$retrieve("reanalysis-era5-single-levels",
 # make a raster brick out of all the pre-processed rasters of path_to_output_erawind_data_this_date
 
 
-brick_u10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"u10",roi_sp_utm,epsg,size_output_grid=250)
-brick_u10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"u10",roi_sp_utm,epsg,size_output_grid=250)
+brick_u10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"u10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
+brick_u10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"u10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
 brick_u10<-c(brick_u10_this_date,brick_u10_this_date_plus_one)
 brick_u10<-brick(brick_u10)
 wind_u10_mean<-mean(brick_u10,na.rm=TRUE)
 
-brick_v10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"v10",roi_sp_utm,epsg,size_output_grid=250)
-brick_v10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"v10",roi_sp_utm,epsg,size_output_grid=250)
+brick_v10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"v10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
+brick_v10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"v10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
 brick_v10<-c(brick_v10_this_date,brick_v10_this_date_plus_one)
 brick_v10<-brick(brick_v10)
 wind_v10_mean<-mean(brick_v10,na.rm=TRUE)
@@ -1388,16 +1497,25 @@ wind_v10_mean<-mean(brick_v10,na.rm=TRUE)
 wind_speed<-sqrt(wind_u10_mean^2+wind_v10_mean^2)
 names(wind_speed)="wind_speed"
 
+#####################################
+########### B.6.3 Calculate stats within the buffer ###############
+#####################################
+
 # Extract wind speed
 locations_hlc_sp_this_date <- raster::extract(wind_speed, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
+cat("END integration wind data\n")
+}
 
 #################################################################
-########### 6. Ephemeris of the Moon ###############
+########### B.7. Ephemeris of the Moon ###############
 #################################################################
 
+if(use_moon){
+  cat("  B.7. Integrating moon ephemeris data ...\n")
+  
 ##############################################################
-#### 6.1 - Download the data ####
+#### B.7.1 - Download the data ####
 ##############################################################
 
 ## More info on IMCCE web services at http://vo.imcce.fr/webservices/miriade/?ephemcc
@@ -1418,33 +1536,32 @@ if (!(file.exists(path_to_output_imcce_data))){
 }
 
 ##############################################################
-#### 6.2 - Prepare the data ####
+#### B.7.2 - Prepare the data ####
 ##############################################################
 
 # Open the data
 moon_magnitude<-read.csv(path_to_output_imcce_data,skip=10)
 colnames(moon_magnitude)<-gsub("\\.","_",colnames(moon_magnitude))
 
-# Add moon visual magnitude to data frame
+#####################################
+########### B.7.3 Calculate stats within the buffer ###############
+#####################################
+
 locations_hlc_sp_this_date$moon_vmag <- moon_magnitude$V_Mag
 
+cat("END integration moon ephemeris data\n")
+}
 
 
-########### Other dynamic data: 
-# - MODIS yearly Land cover (https://cmr.earthdata.nasa.gov/search/concepts/C186286578-LPDAAC_ECS) (https://opendap.cr.usgs.gov/opendap/hyrax/MCD12Q1.006/contents.html)
-# - wet zones (extracted from S1)
-
+cat("END integration dynamic data \n")
 
 
 ############ Static data: 
 # - DEM and DEM-derivatives
 # - land use / land cover (my data) . Check tutos at : https://www.r-craft.org/r-news/efficient-landscape-metrics-calculations-for-buffers-around-sampling-points/  and https://cran.rstudio.com/web/packages/landscapemetrics/vignettes/getstarted.html
 # - built-up areas (facebook data) -> apply the same processings as for land use/land cover, 
-# - population (either fb data or react data)
-# - pedology
 # - pistes -> comment on les choppe ? Uniquement les routes principales ou aussi les petits sentiers ? 
 
-# - night ligths : either dynamic (VNP46 products) or static (NASA 2013 dataset)
 
 
 
