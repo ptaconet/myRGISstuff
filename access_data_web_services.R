@@ -29,28 +29,64 @@
 ############ Set Input parameters for the workflow ############
 ########################################################################################################################
 
+## Global parameters
 path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
+
+## Sources of data to model (mosquito presence and abundance)
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
 path_to_database<-"/home/ptaconet/Bureau/react.db"  
 path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
-path_to_sql_query_households_loc_pop<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
 path_to_csv_population<-NULL
-# Credential to the NASA servers (EarthData)
-username_EarthData<-"ptaconet"  #<EarthData username>
-password_EarthData<-"HHKcue51"  #<EarthData password>
 
-# URLs or paths to static data
-url_to_srtm_datasets<-c("http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N09W006.SRTMGL1.hgt.zip","http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N08W006.SRTMGL1.hgt.zip") # for BF : http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/N10W004.SRTMGL1.hgt.zip   # Check tiles at : https://dwtkns.com/srtm30m/
+## Sources of data and use or not to build the model
+source_dem<-"SRTM"  # Source for the Digital Elevation Model. Available choices: {"SRTM"}
+source_settlements_pop<-"own" # Source for the settlements ond population. TODO : implement with HRSL
+source_roads<-"own"  # Source for the raod network. TODO : implement with OSM
+source_pedology<-"own"
+source_lu_lc<-"own"   # Source for the land use / land cover. TODO : implement with MODIS Land Use / Land Cover 
+source_temperature<-"MODIS_LST"
+source_vegetation_indices<-"MODIS_VEGET"
+source_evapotranspiration<-"MODIS_EVAPO"
+source_rainfall<-"GPM"  # {"GPM","TAMSAT"}
+source_wind<-"ERA5"
+source_moon<-"IMCCE"
+source_nightlights<-"VIIRS"
+
+# Use or not in the modeling ? 
+use_dem<-TRUE
+use_settlements_pop<-TRUE
+use_roads<-TRUE
+use_pedology<-TRUE
+use_lu_lc<-TRUE
+use_temperature<-TRUE
+use_vegetation_indices<-TRUE
+use_evapotranspiration<-TRUE
+use_rainfall<-TRUE
+use_wind<-TRUE
+use_moon<-TRUE
+use_nightlights<-TRUE
+
+  
+## Additional info to set for the input data
+# For DEM 
+srtm_tiles<-c("N08W006","N09W006")
+# For population and settlements
+path_to_sql_query_households_loc_pop<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
 path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4.TIF"  # this file was computed from the Spot 6 image using Orfeo Toolbox (application HaralickTextureExtraction). The inertia texture was computed on a 5 x 5 pixel moving window
 threshold_built_areas<-3 # for CIV : 3 ; for BF : 2.2
+# For LU/LC
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
+# For pedology
+path_to_pedology_dataset<-"pedology/pedo_final.tif"
+hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are considered hydromorphic.   for CIV: c(11,14,5,2,13)  for BF: c(2,3,8,9,10)
+# For road network
+#TODO
 
-
-# Buffer size, within which the raster statistics will be computed (radius in meters)
+## Buffer size, within which the raster statistics will be computed (radius in meters)
 buffer_size_meters=2000 
 ## Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
 lag_days_modis_lst<-40
@@ -58,7 +94,9 @@ lag_days_modis_veget<-40
 lag_days_modis_evapo<-40
 lag_days_gpm<-40
 
-
+## Credential to the NASA servers (EarthData)
+username_EarthData<-"ptaconet"  #<EarthData username>
+password_EarthData<-"HHKcue51"  #<EarthData password>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -81,6 +119,7 @@ library(stringr)
 require(rgrass7)
 require(landscapemetrics)
 require(landscapetools)
+require(spatstat)
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -93,6 +132,7 @@ require(landscapetools)
 ## Urls to the various OpenDAP servers
 url_modis_opendap<-"https://opendap.cr.usgs.gov/opendap/hyrax"
 url_gpm_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
+url_tamsat_data<-"https://www.tamsat.org.uk/public_data/TAMSAT3/zip/"
 url_imcce_webservice<-"http://vo.imcce.fr/webservices/miriade/ephemcc_query.php?"
 url_noaa_nighttime_webservice<-"https://gis.ngdc.noaa.gov/arcgis/rest/services/NPP_VIIRS_DNB/Monthly_AvgRadiance/ImageServer/exportImage"
 modis_lst_terra_collection<-"MOD11A1.006"
@@ -181,12 +221,12 @@ path_to_hrsl_folder<-file.path(path_to_processing_folder,"HRSL")
 path_to_modislst_folder<-file.path(path_to_processing_folder,"MODIS_LST")
 path_to_modisveget_folder<-file.path(path_to_processing_folder,"MODIS_veget")
 path_to_modisevapo_folder<-file.path(path_to_processing_folder,"MODIS_evapo")
-path_to_gpm_folder<-file.path(path_to_processing_folder,"GPM")
+path_to_rainfall_folder<-file.path(path_to_processing_folder,"Rainfall")
 path_to_nighttime_folder<-file.path(path_to_processing_folder,"VIIRS_nighttime")
 path_to_erawind_folder<-file.path(path_to_processing_folder,"ERA_WIND")
 path_to_imcce_folder<-file.path(path_to_processing_folder,"IMCCE_Moon")
 
-directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_gpm_folder,path_to_nighttime_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
+directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_rainfall_folder,path_to_nighttime_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
 lapply(directories, dir.create)
 
 ## Set ROI as sp SpatialPolygon object in epsg 4326
@@ -291,12 +331,13 @@ twi_output_path<-file.path(path_to_dem_folder,"twi.tif")
 #####################################
 ########### A.1.1 Download the data ###############
 #####################################
-
-for (i in 1:length(url_to_srtm_datasets)){
-  srtm_tile_name<-gsub(".*(.*)/","\\1",url_to_srtm_datasets[i])
+for (i in 1:length(srtm_tiles)){
+  #srtm_tile_name<-gsub(".*(.*)/","\\1",srtm_tiles[i])
+  srtm_tile_name<-paste0(srtm_tiles[i],".SRTMGL1.hgt.zip")
   if (!(file.exists(file.path(path_to_dem_folder,srtm_tile_name)))){
-  httr::GET(url_to_srtm_datasets[i],write_disk(file.path(path_to_dem_folder,srtm_tile_name)))
-  unzip(file.path(path_to_dem_folder,srtm_tile_name),exdir = path_to_dem_folder)
+    url_tile<-paste0("http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/",srtm_tiles[i],".SRTMGL1.hgt.zip")
+    httr::GET(url_tile,write_disk(file.path(path_to_dem_folder,srtm_tile_name)))
+    unzip(file.path(path_to_dem_folder,srtm_tile_name),exdir = path_to_dem_folder)
   }
 }
 
@@ -359,8 +400,6 @@ dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locati
 ########### A.2 Settlements and population ###############
 ##########################################################################
 
-## Variables : surface built, shape indices
-
 #####################################
 ########### A.2.1 Open the data ###############
 #####################################
@@ -368,7 +407,6 @@ dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locati
 ## Surface built
 inertia_texture<-raster(path_to_texture_inertia)
 names(inertia_texture)<-"built_surf"
-
 
 ## Location and population of households :
 
@@ -397,17 +435,17 @@ df_households_loc_pop$codemenage<-df_households_loc_pop$codepays_fk<-NULL
 ## Turn location and population of households to SpatialPointsDataFrame
 df_households_loc_pop_sp<-SpatialPointsDataFrame(coords=data.frame(df_households_loc_pop$longitude,df_households_loc_pop$latitude),data=df_households_loc_pop,proj4string=CRS("+init=epsg:4326"))
 df_households_loc_pop_sp<-raster::crop(df_households_loc_pop_sp,extent(roi_sp_4326))
-df_households_loc_pop<-as.data.frame(df_households_loc_pop_sp)
+df_households_loc_pop_df<-as.data.frame(df_households_loc_pop_sp)
   
 ## Get population of each village (from the census dataset)
-df_households_village_pop<-df_households_loc_pop %>% group_by(village) %>% summarize(population=sum(population)) 
+df_households_village_pop<-df_households_loc_pop_df %>% group_by(village) %>% summarize(population=sum(population)) 
 
 ## Get convex hull polygon for each village. We consider the convex hull as the edges of the village. The convex hull is the minimum polygon that encompasses all the locations of the households.  (code from https://stackoverflow.com/questions/25606512/create-convex-hull-polygon-from-points-and-save-as-shapefile)
-villages<-unique(df_households_loc_pop$village)
+villages<-unique(df_households_loc_pop_df$village)
 ps_list<-NULL
 for (i in 1:length(villages)){
   this_village<-villages[i]
-  df_households_loc_pop_this_village<-df_households_loc_pop %>% filter(village==this_village)
+  df_households_loc_pop_this_village<-df_households_loc_pop_df %>% filter(village==this_village)
   dat <- as.matrix(data.frame(df_households_loc_pop_this_village$longitude,df_households_loc_pop_this_village$latitude))
   ch<-chull(dat)
   coords <- dat[c(ch, ch[1]), ]  # closed polygon
@@ -451,9 +489,7 @@ df_villages_loc_pop_sp$built_density<-df_villages_loc_pop_sp$built_surf/df_villa
 ## Finally link to dataset of dates and locations of HLC
 dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,as.data.frame(df_villages_loc_pop_sp),by="village")
 
-
-
-## Get distance from each catch point to the edge of the village (from https://stackoverflow.com/questions/28382949/finding-the-minimum-distance-between-all-points-and-the-polygon-boundary)
+## Get the distance from each catch point to the edge of the village (from https://stackoverflow.com/questions/28382949/finding-the-minimum-distance-between-all-points-and-the-polygon-boundary)
 dates_locations_hlc_sp$dist_to_edge_vill<-0
 for (i in 1:nrow(dates_locations_hlc_sp)){
   df_villages_loc_pop_sp_th_point<-df_villages_loc_pop_sp[which(df_villages_loc_pop_sp$village==dates_locations_hlc_sp$village[i]),]
@@ -462,17 +498,46 @@ for (i in 1:nrow(dates_locations_hlc_sp)){
   dates_locations_hlc_sp$dist_to_edge_vill[i]<-round(as.numeric(rgeos::gDistance(dates_locations_hlc_sp_th_point, as(df_villages_loc_pop_sp_th_point, "SpatialLines"), byid = TRUE)))
 }
 
-
-## Get an indice of the shape of the village (is is dense ? spread ? ). For this we use the locations of the households
-
+## Get an indice of the clustering or ordering of the households in each village. For this we use the locations of the households with the function spatstat::clarkevans
+dates_locations_hlc_sp$dispersion_index<-0
+for (i in 1:length(villages)){
+  df_households_loc_pop_sp_village<-df_households_loc_pop_sp[which(df_households_loc_pop_sp$village==villages[i]),]
+  df_households_loc_pop_ppp_th_village <- as(df_households_loc_pop_sp_village, "ppp")
+  clark_index<-spatstat::clarkevans(df_households_loc_pop_ppp_th_village)
+  clark_index<-as.numeric(clark_index[1])
+  dates_locations_hlc_sp$dispersion_index[which(dates_locations_hlc_sp$village==villages[i])]<-clark_index
+}
 
 
 ##########################################################################
-########### A.4 Land use / land cover ###############
+########### A.4 Pedology ###############
 ##########################################################################
+
+# en CIV les sols hydromorphes sont considérés comme les unités 6,14,17,20,22 de la carte originelle. Sur notre raster sela correspond respectivement aux pixels classés 11,14,5,2,13 
+# au BF les sols hydromorphes sont les pixels classés 2,3,8,9
 
 #####################################
 ########### A.4.1 Prepare the data ###############
+#####################################
+
+# Open the raster
+pedology_raster<-raster(path_to_pedology_dataset)
+
+# Set to NA classes that are not hydromorphic and to 1 the classes that are hydromorphic
+pedology_raster[!(pedology_raster %in% hydromorphic_classes_pixels)]<-NA
+pedology_raster[!is.na(pedology_raster)]<-1
+
+# Compute statistics
+
+# Turn stat to surface (km2) by mutiplying by the surface of a cell
+
+
+##########################################################################
+########### A.5 Land use / land cover ###############
+##########################################################################
+
+#####################################
+########### A.5.1 Prepare the data ###############
 #####################################
 
 
@@ -559,11 +624,11 @@ if (!(file.exists(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_XDim_
 if (!(file.exists(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_YDim_index.txt")))){
   httr::GET(paste0(url_opendap_modis_evapo_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_YDim_index.txt")))
 }   
-if (!(file.exists(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt")))){
-  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt")))
+if (!(file.exists(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt")))){
+  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt")))
 }   
-if (!(file.exists(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt")))){
-  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt")))
+if (!(file.exists(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt")))){
+  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt")))
 }
 
 ## Get the spatial indexes as vectors
@@ -573,8 +638,8 @@ opendap_modis_veget_XDim_index<-fun_get_opendap_index(file.path(path_to_modisveg
 opendap_modis_veget_YDim_index<-fun_get_opendap_index(file.path(path_to_modisveget_folder,"opendap_modis_veget_YDim_index.txt"))
 opendap_modis_evapo_XDim_index<-fun_get_opendap_index(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_XDim_index.txt"))
 opendap_modis_evapo_YDim_index<-fun_get_opendap_index(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_YDim_index.txt"))
-opendap_gpm_lon_index<-fun_get_opendap_index(file.path(path_to_gpm_folder,"opendap_gpm_lon_index.txt"))
-opendap_gpm_lat_index<-fun_get_opendap_index(file.path(path_to_gpm_folder,"opendap_gpm_lat_index.txt"))
+opendap_gpm_lon_index<-fun_get_opendap_index(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt"))
+opendap_gpm_lat_index<-fun_get_opendap_index(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt"))
 
 
 ## Extract indexes for lat min, lat max, lon min and lon max for our bounding box
@@ -996,10 +1061,10 @@ locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locat
 
 
 #####################################
-########### 4. GPM ###############
+########### 4. Rainfall ###############
 #####################################
 
-## Websites
+## GMP Websites
 # TRMM/GPM doc: https://disc2.gesdisc.eosdis.nasa.gov/data/TRMM_L3/TRMM_3B43/doc/README.TRMM_V7.pdf
 # TRMM/GPM products :https://pmm.nasa.gov/data-access/downloads/trmm
 # FAQ: https://pmm.nasa.gov/data-access#prodrt
@@ -1019,6 +1084,9 @@ locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locat
 # through standard http protocol here (impossible to subset the dataset, ie must download the whole dataset (approx. 20 mb / dataset)): https://gpm1.gesdisc.eosdis.nasa.gov/data/GPM_L3/GPM_3IMERGDF.05
 
 ## Exhaustive info and links on the GPM product (including citation): https://disc.gsfc.nasa.gov/datasets/GPM_3IMERGDF_V06/summary?keywords=3imergdf
+
+## TAMSAT : https://www.tamsat.org.uk/data/archive 
+
 ##############################################################
 #### 4.1 - Download the data ####
 ##############################################################
@@ -1044,26 +1112,45 @@ fun_build_gpm_opendap_url<-function(date_catch){
 
 ## Download the data
 
-gpm_list_paths<-NULL
+rainfall_list_paths<-NULL
 #gpm_list_names<-NULL
 
 dates<-rev(dates)
-
+if (source_rainfall=="GPM"){
 for (i in 1:length(dates)){
-  cat(paste0("Downloading GPM data for the ROI and for date ",dates[i],"\n"))
-  # build the url of the dataset
-  url_opendap<-fun_build_gpm_opendap_url(dates[i])
-  # Download the data
-  path_to_output_gpm_data<-file.path(path_to_gpm_raw_folder,paste0(gsub("-","",dates[i]),".nc4"))
-  gpm_list_paths<-c(gpm_list_paths,path_to_output_gpm_data)
-  #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(dates[i] ,this_date_hlc , units = c("days"))))))
-  if (!(file.exists(path_to_output_gpm_data))){
-    httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
-  } else {
-    cat(paste0("Data is already existing for date ",dates[i],"\n"))
+    cat(paste0("Downloading GPM data for the ROI and for date ",dates[i],"\n"))
+    # build the url of the dataset
+    url_opendap<-fun_build_gpm_opendap_url(dates[i])
+    # Download the data
+    path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_",gsub("-","",dates[i]),".nc4"))
+    rainfall_list_paths<-c(rainfall_list_paths,path_to_output_gpm_data)
+    #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(dates[i] ,this_date_hlc , units = c("days"))))))
+    if (!(file.exists(path_to_output_gpm_data))){
+      httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
+    } else {
+      cat(paste0("Data is already existing for date ",dates[i],"\n"))
+    }
+  }
+} else if (source_rainfall=="TAMSAT"){
+  years<-unique(year(dates))
+  # Donwload the data (whole year, because faster than 40 days separately)
+  for (i in 1:length(years)){
+    cat(paste0("Downloading TAMSAT data for the ROI and for year ",years[i],"\n"))
+    url_tamsat<-paste0(url_tamsat_data,"TAMSATv3.0_rfe_daily_",years[i],".zip")
+    path_to_tamsat_output_zip<-file.path(path_to_rainfall_folder,paste0("TAMSATv3.0_rfe_daily_",years[i],".zip"))
+    if (!(file.exists(path_to_tamsat_output_zip))){
+      httr::GET(url = url_tamsat, write_disk(path_to_tamsat_output_zip))
+      unzip(path_to_tamsat_output_zip,exdir = path_to_rainfall_folder)
+    } else {
+      cat(paste0("Data is already existing for date ",years[i],"\n"))
+    }
+    # Retrieve paths for the dates of interest
+    for (i in 1:length(dates)){
+      tamsat_file_path<-file.path(path_to_rainfall_folder,year(dates[i]),sprintf("%02d",month(dates[i])),paste0("rfe",gsub("-","_",dates[i]),".v3.nc"))
+      rainfall_list_paths<-c(rainfall_list_paths,tamsat_file_path)
+    }
   }
 }
-
 
 
 # Another working solution to DL the data :
@@ -1087,55 +1174,76 @@ for (i in 1:length(dates)){
 #### 4.2 - Prepare the data ####
 ##############################################################
 
-brick_gpm<-NULL
-brick_gpm_positive_precip<-NULL
+cat("Processing rainfall data...\n")
+# For interpolation: 
+size_output_grid<-250 # in meters. In degrees : 
+
+brick_rainfall<-NULL
+brick_rainfall_positive_precip<-NULL
 
 
-for (i in 1:length(gpm_list_paths)){
+for (i in 1:length(rainfall_list_paths)){
   
-  gpm_rast<-raster(gpm_list_paths[i])
-  projection(gpm_rast)<-CRS("+init=epsg:4326")
+  rainfall_rast<-raster(rainfall_list_paths[i])
+  
+  if (source_rainfall=="GPM"){
+  projection(rainfall_rast)<-CRS("+init=epsg:4326")
   # The raster has to be flipped. Output was validated with the data from 2017-09-20 (see https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/browse/GPM_3IMERGDF.png)
-  gpm_rast <- t(gpm_rast)
-  gpm_rast <- flip(gpm_rast,'y')
-  gpm_rast <- flip(gpm_rast,'x')
-  gpm_rast <- projectRaster(gpm_rast, crs = CRS(paste0("+init=epsg:",epsg)))
-
+  rainfall_rast <- t(rainfall_rast)
+  rainfall_rast <- flip(rainfall_rast,'y')
+  rainfall_rast <- flip(rainfall_rast,'x')
+  rainfall_rast <- projectRaster(rainfall_rast, crs = CRS(paste0("+init=epsg:",epsg)))
+  } else if (source_rainfall=="TAMSAT") {
+    
+    # Convert output size grid (after interpolation) into degrees
+    size_output_grid<-fun_convert_meters_to_degrees(size_output_grid,mean_latitude)
+    
+    # extend a bit the size of the bbox
+    bbox_tamsat<-extent(roi_sp_4326)
+    bbox_tamsat[1]=bbox_tamsat[1]-0.5
+    bbox_tamsat[2]=bbox_tamsat[2]+0.5
+    bbox_tamsat[3]=bbox_tamsat[3]-0.5
+    bbox_tamsat[4]=bbox_tamsat[4]+0.5
+    
+    # Crop to the bbox
+    rainfall_rast<-crop(rainfall_rast,bbox_tamsat)
+    
+  }
+  
   ### Interpolate 
-  size_output_grid<-250
-  r<-gpm_rast
+  r<-rainfall_rast
   res(r)<-c(size_output_grid,size_output_grid)
   
   ## Using Inverse distance weighting. More info : https://pro.arcgis.com/fr/pro-app/help/analysis/geostatistical-analyst/how-inverse-distance-weighted-interpolation-works.htm
   #grd <- as(r, 'SpatialGrid')
-  #P<-rasterToPoints(gpm_rast, spatial = TRUE)
+  #P<-rasterToPoints(rainfall_rast, spatial = TRUE)
   # Interpolate the grid cells using a power value of 2 (idp=2.0). 
   #P.idw <- gstat::idw(P$layer ~ 1, P, newdata=grd, idp=2.0)
   # Convert to raster object
   #gpm_rast_resample_idw <- raster(P.idw)
   
   ## Using resample (bilinear resampling, cf. http://desktop.arcgis.com/fr/arcmap/latest/extensions/spatial-analyst/performing-analysis/cell-size-and-resampling-in-analysis.htm)
-  gpm_rast<-resample(gpm_rast,r,method='bilinear')
+  rainfall_rast<-resample(rainfall_rast,r,method='bilinear')
   
-  brick_gpm<-c(brick_gpm,gpm_rast)
-  #names(brick_gpm[[length(brick_gpm)]])<-gpm_list_names[i]
+  brick_rainfall<-c(brick_rainfall,rainfall_rast)
+  #names(brick_rainfall[[length(brick_rainfall)]])<-gpm_list_names[i]
   
-  gpm_positive_precip_rast<-gpm_rast
-  gpm_positive_precip_rast[gpm_positive_precip_rast > 0] <- 1
-  gpm_positive_precip_rast[gpm_positive_precip_rast <= 0] <- 0
-  brick_gpm_positive_precip<-c(brick_gpm_positive_precip,gpm_positive_precip_rast)
+  rainfall_positive_precip_rast<-rainfall_rast
+  rainfall_positive_precip_rast[rainfall_positive_precip_rast > 0] <- 1
+  rainfall_positive_precip_rast[rainfall_positive_precip_rast <= 0] <- 0
+  brick_rainfall_positive_precip<-c(brick_rainfall_positive_precip,rainfall_positive_precip_rast)
 }
 
-brick_gpm<-brick(brick_gpm)
+brick_rainfall<-brick(brick_rainfall)
 
 ## Sum of the precipitations for the n days (on a 3 days moving window ?)
-precip_sum<-sum(brick_gpm,na.rm = T)
+precip_sum<-sum(v,na.rm = T)
 names(precip_sum)<-"precip_sum"
 ## Precipitation for the date of HLC
-precip_0<-brick_gpm[[1]]
+precip_0<-brick_rainfall[[1]]
 names(precip_0)<-"precip_0"
 ## Number of days with precipitations during the n days before the HLC
-precip_ndays<-sum(brick(brick_gpm_positive_precip),na.rm = T)
+precip_ndays<-sum(brick(brick_rainfall_positive_precip),na.rm = T)
 names(precip_ndays)<-"precip_ndays"
 
 # Extract mean of GPM for each raster
