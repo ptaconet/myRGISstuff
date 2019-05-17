@@ -30,7 +30,7 @@ path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file co
 
 ## Sources of the data to model (mosquito presence and abundance)
 # If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
-path_to_database<-"/home/ptaconet/Bureau/react.db"  
+path_to_database<-"/home/ptaconet/Bureau/React_dbase_V7.db"  
 path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
 # Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
 path_to_csv_dates_loc<-NULL
@@ -68,19 +68,20 @@ use_nightlights<-TRUE
 
 ## Additional info to set for each source input data
 # For DEM 
-srtm_tiles<-c("N08W006","N09W006")  # CIV : c("N08W006","N09W006") ; BF : c("N10W004","N11W004")  ## TODO automatize in a future dev  
+srtm_tiles<-c("N08W006","N09W006")  # CIV : c("N08W006","N09W006") ; BF : c("N10W004","N11W004")  ## TODO NEXT DEV : automatize with ROI
 # For DEM-derivatives
-threshold_accumulation_raster<-800  # CIV: 800 ; BF: 1000 
+threshold_accumulation_raster<-800  # CIV: 800 ; BF: 1000    ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
 # For population and settlements
-path_to_sql_query_households_loc_pop<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
+path_to_sql_query_households_loc_pop<-NULL # "https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
 path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4.TIF"  # this file was computed from the Spot 6 image using Orfeo Toolbox (application HaralickTextureExtraction). The inertia texture was computed on a 5 x 5 pixel moving window
-threshold_inertia_built_areas<-3 # CIV : 3 ; BF : 2.2
-path_to_csv_population<-NULL
+threshold_inertia_built_areas<-3 # CIV : 3 ; BF : 2.2        ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
+buffer_built_surf_density<-100 # buffer (in meters) to consider to calculate the built up density around each catch point
+path_to_csv_households_population<-"df_households_loc_pop_civ.csv"
 # For LU/LC
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
 buffer_sizes_lulc_meters<-c(1000,2000)
 # For pedology
-path_to_pedology_dataset<-"pedology/pedo_final.tif"
+path_to_pedology_dataset<-"pedology/pedo_final_32630.tif"
 hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are considered hydromorphic.   for CIV: c(11,14,5,2,13)  for BF: c(2,3,8,9,10)
 # For road network
 path_to_road_network<-""
@@ -93,8 +94,8 @@ size_output_grid_resample_wind<-250 # if resample_wind is TRUE : size of output 
 
 
 ## Additional paramters to set for integration of the data 
-# Buffer size, within which the raster statistics will be computed (radius in meters)
-buffer_size_meters=2000 
+# Buffer sizes, within which the raster statistics will be computed (radius in meters)
+buffer_sizes_meters=c(500,1000,2000) 
 # Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
 lag_max_days_temperature<-40
 lag_max_days_veget_indices<-40
@@ -124,6 +125,7 @@ require(rgrass7)
 require(landscapemetrics)
 require(landscapetools)
 require(spatstat)
+require(maptools)
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -296,7 +298,7 @@ fun_convert_meters_to_degrees<-function(buffer_size_meters,mean_latitude){
 }
 
 mean_latitude<-mean(bbox(roi_sp_4326)[2,])
-buffer_size_degrees<-fun_convert_meters_to_degrees(buffer_size_meters,mean_latitude)
+buffer_sizes_degrees<-fun_convert_meters_to_degrees(buffer_sizes_meters,mean_latitude)
 
 ## Set ROI as sp SpatialPolygon object in UTM epsg and in MODIS projection
 roi_sp_utm <- spTransform(roi_sp_4326, CRS(paste0("+init=epsg:",epsg)))
@@ -350,6 +352,7 @@ cat("  A.1.1. Downloading DEM data ...\n")
   
 # Set output paths
 dem_output_path<-file.path(path_to_dem_folder,"DEM.tif")
+dem_depressionless_output_path<-file.path(path_to_dem_folder,"DEM_depressionless.tif")
 slope_output_path<-file.path(path_to_dem_folder,"slope.tif")
 aspect_output_path<-file.path(path_to_dem_folder,"aspect.tif")
 accumulation_output_path<-file.path(path_to_dem_folder,"accumulation.tif")
@@ -399,18 +402,22 @@ if(!file.exists(slope_output_path)|!file.exists(aspect_output_path)|!file.exists
   execGRASS("r.external", flags="o", parameters=list(input=file.path(path_to_dem_folder,"DEM.tif"), output="tmprast",band=1))
   execGRASS("g.region", parameters=list(raster="tmprast")) 
 
+  # Filters and generates a depressionless elevation map
+  execGRASS("r.fill.dir", flags="overwrite", parameters=list(input="tmprast", output="DEM",direction="dir"))
+  execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="DEM", output=dem_depressionless_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  
   # Compute slope and aspect and save to disk
-  execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="tmprast", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
+  execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="DEM", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="slope", output=slope_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="aspect", output=aspect_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 
   # Compute hydrograpy indices and save to disk
-  execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="tmprast", accumulation="accumulation", tci="tci"))
+  execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="DEM", accumulation="accumulation", tci="tci"))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="accumulation", output=accumulation_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci", output=tci_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 
   # Compute TWI indice
-  execGRASS("r.topidx", flags="overwrite", parameters=list(input="tmprast", output="twi"))
+  execGRASS("r.topidx", flags="overwrite", parameters=list(input="DEM", output="twi"))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="twi", output=twi_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 }
 
@@ -427,9 +434,10 @@ if (!file.exists(streams_network_path)){
   execGRASS("r.external", flags="overwrite", parameters=list(input=accumulation_threshold_output_path, output="acc_threshold",band=1))
   execGRASS("g.region", parameters=list(raster="acc_threshold")) 
   execGRASS("r.thin", flags="overwrite", parameters=list(input="acc_threshold",output="acc_thin"))
-  execGRASS("r.to.vect", flags="overwrite", parameters=list(input="acc_thin", output="acc_thin_vect", type="line"))
-  execGRASS("v.split", flags=c("overwrite","verbose"), parameters=list(input="acc_thin_vect", output="acc_thin_vect_split", length=20, units="map"))
   execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="acc_thin", output=file.path(path_to_dem_folder,"accumulation_thin.tif"), format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+  execGRASS("r.to.vect", flags="overwrite", parameters=list(input="acc_thin", output="acc_thin_vect", type="line"))
+  # With v.split we split the stream network into pieces of 20 meters. This will be used then to measure the mean length between the HLC point and the streams within the buffer
+  execGRASS("v.split", flags=c("overwrite","verbose"), parameters=list(input="acc_thin_vect", output="acc_thin_vect_split", length=20, units="map"))
   # the step v.split does not give the appropriate results when executed in R, although it does not send back any error... It is weird because it works in QGIS (through GRASS plugin). For now we need to do it by hand in QGIS ...
   execGRASS("v.out.ogr", flags=c("m","overwrite"), parameters=list(input="acc_thin_vect", type="line", output=streams_network_path))
   #execGRASS("v.out.ogr", flags=c("m","overwrite"), parameters=list(input="acc_thin_vect_split", type="line", output=streams_network_path))
@@ -437,7 +445,7 @@ if (!file.exists(streams_network_path)){
 }
 
 # open all rasters
-dem_and_derivatives_rast <- brick(list(dem_output_path,slope_output_path,aspect_output_path,accumulation_output_path,tci_output_path,twi_output_path))
+dem_and_derivatives_rast <- brick(list(dem_depressionless_output_path,slope_output_path,aspect_output_path,accumulation_output_path,tci_output_path,twi_output_path))
 names(dem_and_derivatives_rast)[1]<-"elevation"
 
 # open stream network
@@ -447,33 +455,46 @@ streams_network$DN<-seq(1,nrow(streams_network),1)
 #####################################
 ########### A.1.3 Calculate stats within the buffer ###############
 #####################################
-cat("  A.1.3. Calculating DEM and DEM-derivatives data statistics within the buffer...\n")
-## calculate the stats within the buffer. First convert HLC dataset to UTM proj . 
-dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,CRS(paste0("+init=epsg:",epsg)))
-dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=FALSE) 
+cat("  A.1.3. Calculating DEM and DEM-derivatives data statistics within the buffers...\n")
+## calculate the stats within the buffers. First convert HLC dataset to UTM proj . 
+dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,proj4string(dem_and_derivatives_rast))
+for (i in 1:length(buffer_sizes_meters)){
+  dates_locations_hlc_sp <- raster::extract(dem_and_derivatives_rast, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i],fun=mean, na.rm=TRUE, sp=TRUE,small=FALSE) 
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(dem_and_derivatives_rast))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(dem_and_derivatives_rast))],"_",buffer_sizes_meters[i])
+}
 ##### WARNING : the function raster::extract can produce error that are not visible (ie no error is returned) if points are outside the raster extent. It is very important to check that at least one raster cell is intersected
 
 ## Calculate the stats related to hydrographic network (stream network): mean and min distance to stream, total length of stream
-dates_locations_hlc_sp$length_stream<-0
-dates_locations_hlc_sp$min_distance_to_stream<-NA
-dates_locations_hlc_sp$mean_distance_to_stream<-NA
 
 dates_locations_hlc_sf<-st_as_sf(dates_locations_hlc_sp)
-buffer<-st_buffer(dates_locations_hlc_sf,dist=buffer_size_meters)
-# Get
-lines_on_buffer<-st_join(buffer,streams_network, join = st_intersects,left = TRUE)
 
-# Not optimized with this loop but still ok... takes about 2 min for 2200 HLC points
-for (i in 1:nrow(dates_locations_hlc_sp)){
-  this_pt<-dates_locations_hlc_sf[which(dates_locations_hlc_sf$ID==i),]
-  th_buff_hlc_lines<-lines_on_buffer[which(lines_on_buffer$ID==i),]
-  th_lines_within_buffer<-streams_network[which(streams_network$DN %in% th_buff_hlc_lines$DN),]
-  distances_to_stream<-st_distance(this_pt,th_lines_within_buffer)
-  dates_locations_hlc_sp$length_stream[which(dates_locations_hlc_sp$ID==i)]<-as.numeric(sum(st_length(th_lines_within_buffer)))
-  dates_locations_hlc_sp$min_distance_to_stream[which(dates_locations_hlc_sp$ID==i)]<-as.numeric(min(distances_to_stream))
-  dates_locations_hlc_sp$mean_distance_to_stream[which(dates_locations_hlc_sp$ID==i)]<-as.numeric(mean(distances_to_stream))
+# Really not optimized with these loops... takes about 7 min for 10000 HLC points for each buffer
+for (i in 1:length(buffer_sizes_meters)){
+
+  # Initialize columns
+  dates_locations_hlc_sp$length_stream<-0
+  dates_locations_hlc_sp$min_dist_to_stream<-NA
+  dates_locations_hlc_sp$mean_dist_to_stream<-NA
+
+  # Create the buffers
+  buffer<-st_buffer(dates_locations_hlc_sf,dist=buffer_sizes_meters[i])
+  # Get the streams within the buffer 
+  lines_on_buffer<-st_join(buffer,streams_network, join = st_intersects,left = TRUE)
+
+  for (j in 1:nrow(dates_locations_hlc_sp)){
+    this_pt<-dates_locations_hlc_sf[which(dates_locations_hlc_sf$ID==j),]
+    th_buff_hlc_lines<-lines_on_buffer[which(lines_on_buffer$ID==j),]
+    th_lines_within_buffer<-streams_network[which(streams_network$DN %in% th_buff_hlc_lines$DN),]
+    distances_to_stream<-st_distance(this_pt,th_lines_within_buffer)
+    dates_locations_hlc_sp$length_stream[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(sum(st_length(th_lines_within_buffer)))
+    dates_locations_hlc_sp$min_dist_to_stream[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(min(distances_to_stream))
+    dates_locations_hlc_sp$mean_dist_to_stream[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(mean(distances_to_stream))
+    #print(paste0(i," ",j))
+  }
+  
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))],"_",buffer_sizes_meters[i])
+  
 }
-
 
 cat("END integration DEM and DEM-derivatives data")
 }
@@ -495,20 +516,14 @@ names(inertia_texture)<-"built_surf"
 
 ## Location and population of households :
 
-# Output is a data.frame with columns:
-# - population = population in the household (numeric)
+df_households_loc_pop<-read.csv(path_to_csv_households_population)
+
+# df_households_loc_pop is a data.frame with the following columns:
 # - latitude = latitude of the household (numeric)
 # - longitude = longitude of the household (numeric)
+# - population = population in the household (numeric)
 # - village = village name (or code) (character)
 
-# Query DB 
-sql_query_households_loc_pop<-paste(readLines(path_to_sql_query_households_loc_pop), collapse="\n")
-df_households_loc_pop<-dbGetQuery(react_db, sql_query_households_loc_pop)
-# Tidy the dataset
-df_households_loc_pop <- df_households_loc_pop %>% filter (!is.na(latitude)) %>% filter (latitude!="")
-df_households_loc_pop$latitude <- as.numeric(gsub(",",".",df_households_loc_pop$latitude))
-df_households_loc_pop$longitude <- as.numeric(gsub(",",".",df_households_loc_pop$longitude))
-df_households_loc_pop$codemenage<-df_households_loc_pop$codepays_fk<-NULL
 
 
 #####################################
@@ -547,11 +562,14 @@ df_villages_loc_pop_sp<-SpatialPolygonsDataFrame(spatialpoly,df_households_villa
 df_villages_loc_pop_sp$area<-raster::area(df_villages_loc_pop_sp)
 df_villages_loc_pop_sp$pop_density<-df_villages_loc_pop_sp$population/df_villages_loc_pop_sp$area
 
-## Get the surface built in each village
+## Get the surface built in each village + the density of surface built around each catch point
 # We use the haralick correlation texture file calculated with the Spot 6 image. The pixels with value > threshold_inertia_built_areas (26000 for CIV) are considered as built surfaces (visual thresholding), other values are unbuilt surfaces.
 
 df_villages_loc_pop_sp$built_surf<-0
+dates_locations_hlc_sp$built_surf_density<-0
+
 for (i in 1:length(villages)){
+  # surface built in each village
   df_villages_loc_pop_sp_th_village<-df_villages_loc_pop_sp[which(df_villages_loc_pop_sp$village==villages[i]),]
   df_villages_loc_pop_sp_th_village<-spTransform(df_villages_loc_pop_sp_th_village,CRS(paste0("+init=epsg:",epsg)))
   inertia_this_village<-raster::crop(inertia_texture,df_villages_loc_pop_sp_th_village)
@@ -559,7 +577,18 @@ for (i in 1:length(villages)){
   inertia_this_village[inertia_this_village>threshold_inertia_built_areas]=1
   df_villages_loc_pop_sp_th_village <- raster::extract(inertia_this_village, df_villages_loc_pop_sp_th_village,fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
   df_villages_loc_pop_sp$built_surf[which(df_villages_loc_pop_sp$village==villages[i])]<-df_villages_loc_pop_sp_th_village$built_surf
+  
+  # built-up surface in a buffer of buffer_built_surf_density around each catch point
+  names(inertia_this_village)<-"built_surf_density"
+  dates_locations_hlc_sp_th_village<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$village==villages[i]),]
+  dates_locations_hlc_sp_th_village<-raster::extract(inertia_this_village, dates_locations_hlc_sp_th_village, buffer=buffer_built_surf_density, fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
+  dates_locations_hlc_sp$built_surf_density[which(dates_locations_hlc_sp$village==villages[i])] <- dates_locations_hlc_sp_th_village[,2]
+  
+  print(i)
 }
+
+# density of surface built around each catch point
+dates_locations_hlc_sp$built_surf_density<-(dates_locations_hlc_sp$built_surf_density*res(inertia_texture)[1]*res(inertia_texture)[2])/(pi*buffer_built_surf_density^2)*100
 
 # Note: to do the same thing we could have done the way here-under, easier. However the raster is very big, hence the step inertia_texture[inertia_texture<=3]<-NA takes too long. Hence we do it the 'nasty' (ie loop) way
 #inertia_texture[inertia_texture<=3]<-NA
@@ -567,10 +596,10 @@ for (i in 1:length(villages)){
 #df_villages_loc_pop_sp <- raster::extract(inertia_texture, df_villages_loc_pop_sp,fun=sum, na.rm=TRUE, sp=TRUE,small=TRUE) 
 
 # We put the built surface in m2. 1 pixel is 1.57 m * 1.57 m (res(inertia_texture))
-df_villages_loc_pop_sp$built_surf<-df_villages_loc_pop_sp$built_surf*res(inertia_texture)[1]^2
+df_villages_loc_pop_sp$built_surf<-df_villages_loc_pop_sp$built_surf*res(inertia_texture)[1]*res(inertia_texture)[2]
 
 # Compute built-up density
-df_villages_loc_pop_sp$built_density<-df_villages_loc_pop_sp$built_surf/df_villages_loc_pop_sp$area
+df_villages_loc_pop_sp$built_density<-df_villages_loc_pop_sp$built_surf/df_villages_loc_pop_sp$area*100
 
 ## Finally link to dataset of dates and locations of HLC
 dates_locations_hlc_sp<-merge(dates_locations_hlc_sp,as.data.frame(df_villages_loc_pop_sp),by="village")
@@ -588,7 +617,7 @@ for (i in 1:nrow(dates_locations_hlc_sp)){
 dates_locations_hlc_sp$dispersion_index<-0
 for (i in 1:length(villages)){
   df_households_loc_pop_sp_village<-df_households_loc_pop_sp[which(df_households_loc_pop_sp$village==villages[i]),]
-  df_households_loc_pop_ppp_th_village <- as(df_households_loc_pop_sp_village, "ppp")
+  df_households_loc_pop_ppp_th_village <- as(df_households_loc_pop_sp_village, "ppp") # uses the maptools package
   clark_index<-spatstat::clarkevans(df_households_loc_pop_ppp_th_village)
   clark_index<-as.numeric(clark_index[1])
   dates_locations_hlc_sp$dispersion_index[which(dates_locations_hlc_sp$village==villages[i])]<-clark_index
@@ -617,15 +646,22 @@ pedology_raster<-raster(path_to_pedology_dataset)
 ########### A.3.2 Prepare the data ###############
 #####################################
 cat("   A.3.2. Preparing pedology data ...\n")
-# Set to NA classes that are not hydromorphic and to 1 the classes that are hydromorphic
-pedology_raster[!(pedology_raster %in% hydromorphic_classes_pixels)]<-NA
-pedology_raster[!is.na(pedology_raster)]<-1
+# Set to 0 classes that are not hydromorphic and to 1 the classes that are hydromorphic
+pedology_raster[!(pedology_raster %in% hydromorphic_classes_pixels)]<-0
+pedology_raster[pedology_raster!=0]<-1
+names(pedology_raster)="surf_hydro_soil"
 
 #####################################
 ########### A.3.3 Calculate stats within the buffer ###############
 #####################################
 # Turn stat to surface (km2) by mutiplying by the surface of a cell
 cat("   A.3.3. Calculating pedology data statistics within the buffer...\n")
+dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,proj4string(pedology_raster))
+for (i in 1:length(buffer_sizes_meters)){
+  dates_locations_hlc_sp <- raster::extract(pedology_raster, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i],fun=sum, na.rm=TRUE, sp=TRUE,small=FALSE) 
+  dates_locations_hlc_sp$surf_hydro_soil<-dates_locations_hlc_sp$surf_hydro_soil*res(pedology_raster)[1]*res(pedology_raster)[2] # coonvert into area in m2
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(pedology_raster))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(pedology_raster))],"_",buffer_sizes_meters[i])  # rename column
+}
 
 cat("END integration pedology data")
 } 
@@ -636,7 +672,7 @@ cat("END integration pedology data")
 
 if(use_lu_lc){
   cat(" A.4 Integrating land use / land cover data ...\n")
-  
+  # See https://r-spatialecology.github.io/landscapemetrics/articles/articles/utility.html
 #####################################
 ########### A.4.1 Open the data ###############
 #####################################
@@ -666,7 +702,10 @@ cat("B. Integrating dynamic data ... \n")
 all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
 
 ## For tests: retrieve all the lines for the first date
-i=20
+
+
+
+i=100
 locations_hlc_sp_this_date<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$datecapture==all_dates_hlc[i]),]
 this_date_hlc<-as.Date(all_dates_hlc[i])
 
@@ -924,30 +963,34 @@ for (i in 1:length(dates_modis_lst)){
 
   cat(paste0("pre-processing LST for date ",dates_modis_lst[i],"\n"))
 
-# Create raster of LST_day maximum value combining Terra and Aqua by taking the maximum available value for each pixel
-rast_lst_day_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Day_1km")
-rast_lst_day_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Day_1km")
-rast_lst_day<-brick(rast_lst_day_terra,rast_lst_day_aqua)
+  # Create raster of LST_day maximum value combining Terra and Aqua by taking the maximum available value for each pixel
+  rast_lst_day_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Day_1km")
+  rast_lst_day_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Day_1km")
+  rast_lst_day<-brick(rast_lst_day_terra,rast_lst_day_aqua)
 
-rast_max_lst_day<-max(rast_lst_day,na.rm=TRUE)
-brick_lst_day<-c(brick_lst_day,rast_max_lst_day)
-names(brick_lst_day[[length(brick_lst_day)]])<-paste0("lst_max_",i-1)
+  rast_max_lst_day<-max(rast_lst_day,na.rm=TRUE)
+  brick_lst_day<-c(brick_lst_day,rast_max_lst_day)
+  names(brick_lst_day[[length(brick_lst_day)]])<-paste0("lst_max_",i-1)
 
-# Create raster of LST_night minimum value combining Terra and Aqua by taking the minimum available value for each pixel
-rast_lst_night_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Night_1km")
-rast_lst_night_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Night_1km")
-rast_lst_night<-brick(rast_lst_night_terra,rast_lst_night_aqua)
+  # Create raster of LST_night minimum value combining Terra and Aqua by taking the minimum available value for each pixel
+  rast_lst_night_terra<-fun_preprocess_modis_product(terra_names[i],"LST_Night_1km")
+  rast_lst_night_aqua<-fun_preprocess_modis_product(aqua_names[i],"LST_Night_1km")
+  rast_lst_night<-brick(rast_lst_night_terra,rast_lst_night_aqua)
 
-rast_min_lst_night<-min(rast_lst_night,na.rm=TRUE)
-brick_lst_night<-c(brick_lst_night,rast_min_lst_night)
-names(brick_lst_night[[length(brick_lst_night)]])<-paste0("lst_min_",i-1)
+  rast_min_lst_night<-min(rast_lst_night,na.rm=TRUE)
+  brick_lst_night<-c(brick_lst_night,rast_min_lst_night)
+  names(brick_lst_night[[length(brick_lst_night)]])<-paste0("lst_min_",i-1)
 
 }
 
 brick_lst_day<-brick(brick_lst_day)
 brick_lst_night<-brick(brick_lst_night)
 
+# Conversion from K to °C
+brick_lst_day <- brick_lst_day - 273.15
+brick_lst_night <- brick_lst_night - 273.15
 
+## TODO thermal amplitude
 #####################################
 ########### B.1.3 Calculate stats within the buffer ###############
 #####################################
@@ -956,8 +999,15 @@ brick_lst_night<-brick(brick_lst_night)
 # na.rm = TRUE means that NA values in the raster are not taken into account
 # small=TRUE means that each time the buffer intersects a non NA cell it takes into account the cell value
 # sp=TRUE means that the extracted values are added to the data.frame of the Spatial object
-locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_day, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=count, na.rm=TRUE, sp=TRUE,small=TRUE) 
-locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_lst_night, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
+dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,proj4string(brick_lst_day))
+
+for (i in 1:length(buffer_sizes_meters)){
+  dates_locations_hlc_sp <- raster::extract(brick_lst_day, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  dates_locations_hlc_sp <- raster::extract(brick_lst_night, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_day))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_day))],"_",buffer_sizes_meters[i])  # rename column
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_night))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_night))],"_",buffer_sizes_meters[i])  # rename column
+}
 
 }
 
