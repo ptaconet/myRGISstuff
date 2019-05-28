@@ -1,0 +1,22 @@
+id_metadata,identifier,persistent_identifier,title,contacts_and_roles,subject,description,date,format,langage,relation,spatial_coverage,temporal_coverage,rights,source,lineage,supplemental_information
+1,raw_supervcapture,raw_supervcapture,Human Landing Catch supervision raw data,,,,,,,script_dataset_generation@https://raw.githubusercontent.com/ptaconet/r_react/master/database/raw_supervcapture.R,,,,,,BF mission 3 is missing
+2,raw_villages,raw_villages,Villages,,,"Informations on the villages of the project : name, country, spatial coordinates",,,,,,,,,,"villages with coordinates (-5,9) must be interpreted as NA coordinates"
+3,raw_menages,raw_menages,Households,,,,,,,,,,,,,"villages with coordinates (-5,9) must be interpreted as NA coordinates"
+4,raw_individus,raw_individus,Individu,,,,,,,,,,,,,
+5,households_loc_pop,households_loc_pop,Population and location of each household,,,"Population of each household
+The table was generated using the tables raw_villages, raw_menages and raw_individus
+The location of some households was corrected",,,,script_dataset_generation@https://raw.githubusercontent.com/ptaconet/r_react/master/database/households_loc_pop.R,,,,,,
+6,raw_capturedeterm,raw_capturedeterm,Mosquitoes counts,,,,,,,,,,,,,Mosquitoes for which parturity was not determined are marked as NA in the column ‘parturite’
+7,villages_loc_pop,villages_loc_pop,Population and location of each village,,,"Population of each village
+The table was generated using the table households_loc_pop and raw_villages",,,,script_dataset_generation@https://raw.githubusercontent.com/ptaconet/r_react/master/database/villages_loc_pop.R,,,,,,
+8,raw_bf_dates_hlc,raw_bf_dates_hlc,Dates and hours of the HLC in BF ,,,,,,,,,,,,,The dataset was created by Dieudonné
+9,lu_lc_ground_truth_civ_raw,lu_lc_ground_truth_civ_raw,Parcels used for the generation of the Land use / land cover map in CIV – raw version,,,Version brute des parcelles d’occupation du sol receuillies et utilisées pour la génération des cartes d’occupation / utilisation du sol en Cote d’Ivoire. ,,,,,,,,,,
+10,lu_lc_ground_truth_civ_rev,lu_lc_ground_truth_civ_rev,Parcels used for the generation of the Land use / land cover map in CIV – revised version,,,Version corrigée des parcelles d’occupation du sol receuillies et utilisées pour la génération des cartes d’occupation / utilisation du sol en Cote d’Ivoire. Cette couche est utilisée en entrée du workflow de génération de la carte.,,,,,,,,,"step1 : Les objets du jeu de données brut (données receuillies sur le terrain) ont été alignés avec les objets issus de la segmentation de l’image THRS
+step2 : Un certain nombre d’objet clairement identifiable sur l’image satellite très haute résolution a été ajouté par photo interprétation (par ex. eaux courantes, sentiers, etc.)
+step3 : Une hiérarchie de classes comprenant 5 niveaux a été créé",
+11,lu_lc_ground_truth_bf_raw,lu_lc_ground_truth_bf_raw,Parcels used for the generation of the Land use / land cover map in BF – raw version,,,Version brute des parcelles d’occupation du sol receuillies et utilisées pour la génération des cartes d’occupation / utilisation du sol au Burkina Faso. ,,,,,,,,,,
+12,lu_lc_ground_truth_bf_rev,lu_lc_ground_truth_bf_rev,Parcels used for the generation of the Land use / land cover map in BF – revised version,,,Version corrigée des parcelles d’occupation du sol receuillies et utilisées pour la génération des cartes d’occupation / utilisation du sol au Burkina Faso. Cette couche est utilisée en entrée du workflow de génération de la carte.,,,,,,,,,"step1 : Les objets du jeu de données brut (données receuillies sur le terrain) ont été alignés avec les objets issus de la segmentation de l’image THRS
+step2 : Un certain nombre d’objet clairement identifiable sur l’image satellite très haute résolution a été ajouté par photo interprétation (par ex. eaux courantes, sentiers, etc.)
+step3 : Une hiérarchie de classes comprenant 5 niveaux a été créé",
+13,pedology_civ,pedology_civ,Pedology raster map for CIV,,,Carte pédologique de la zone en CIV réalisée par classification non supervisée à partir d’une carte papier de l’IRD,,,,script_dataset_generation@https://raw.githubusercontent.com/ptaconet/r_react/master/database/pedology.R,,,,,,
+14,pedology_bf,pedology_bf,Pedology raster map for BF,,,Carte pédologique de la zone au BF réalisée par classification non supervisée à partir d’une carte papier de l’IRD,,,,script_dataset_generation@https://raw.githubusercontent.com/ptaconet/r_react/master/database/pedology.R,,,,,,
