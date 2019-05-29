@@ -24,83 +24,59 @@ rm(list = ls())
 
 ## Global parameters
 path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
-path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
 path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file containing the credential to the NASA servers (EarthData)
 
-## Sources of the data to model (mosquito presence and abundance)
-# If we extract the dataset of dates and locations of HLC from a database, provide path to DB and QSL query to execute :
-path_to_database<-"/home/ptaconet/Bureau/React_dbase_V7.db"  
-path_to_sql_query_dates_loc_hlc<-"https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/hlc_dates_location.sql"
-# Else if we extract the dataset of dates and locations of HLC from a csv file, provide the path to the csv file :
-path_to_csv_dates_loc<-NULL
+## Path to the input dataset (date, lat, lon of HLC) (response variable)
+path_to_csv_hlc_dates_loc<-"df_hlc.csv"
 
-
-## Sources of data and use or not to build the model. 
-## For now the only source where the user has more than 1 choice is the rainfall
-#source_dem<-"SRTM"  # Source for the Digital Elevation Model. Available choices: {"SRTM"}
-#source_settlements_pop<-"own" # Source for the settlements ond population. TODO : implement with HRSL
-#source_roads<-"own"  # Source for the raod network. TODO : implement with OSM
-#source_pedology<-"own"
-#source_lu_lc<-"own"   # Source for the land use / land cover. TODO : implement with MODIS Land Use / Land Cover 
-#source_temperature<-"MODIS_LST"
-#source_vegetation_indices<-"MODIS_VEGET"
-#source_evapotranspiration<-"MODIS_EVAPO"
-source_rainfall<-"GPM"  # {"GPM","TAMSAT"}
-#source_wind<-"ERA5"
-#source_moon<-"IMCCE"
-#source_nightlights<-"VIIRS"
-
-# Use data or not ? 
+## Covariates to retrieve. For each covariate that is used (use_xxx<-TRUE), the related parameters must be set
+# DEM and DEM-derivatives 
 use_dem<-TRUE
-use_settlements_pop<-TRUE
-use_roads<-TRUE
-use_pedology<-TRUE
-use_lu_lc<-TRUE
-use_temperature<-TRUE
-use_vegetation_indices<-TRUE
-use_evapotranspiration<-TRUE
-use_rainfall<-TRUE
-use_wind<-TRUE
-use_moon<-TRUE
-use_nightlights<-TRUE
-
-
-## Additional info to set for each source input data
-# For DEM 
-srtm_tiles<-c("N08W006","N09W006")  # CIV : c("N08W006","N09W006") ; BF : c("N10W004","N11W004")  ## TODO NEXT DEV : automatize with ROI
-# For DEM-derivatives
+srtm_tiles<-c("N08W006","N09W006")  # CIV : STRM tile numbers can be retrieved here : https://dwtkns.com/srtm30m/    c("N08W006","N09W006") ; BF : c("N10W004","N11W004")  ## TODO NEXT DEV : automatize with ROI
 threshold_accumulation_raster<-800  # CIV: 800 ; BF: 1000    ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
-# For population and settlements
-path_to_sql_query_households_loc_pop<-NULL # "https://raw.githubusercontent.com/ptaconet/r_react/master/db_sql/loc_pop_households.sql"
+# Population and settlements (source: own) #TODO next dev: implement with HRSL (facebook data)
+use_settlements_pop<-TRUE
+path_to_csv_households_population<-"df_households_loc_pop.csv"
 path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4.TIF"  # this file was computed from the Spot 6 image using Orfeo Toolbox (application HaralickTextureExtraction). The inertia texture was computed on a 5 x 5 pixel moving window
 threshold_inertia_built_areas<-3 # CIV : 3 ; BF : 2.2        ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
 buffer_built_surf_density<-100 # buffer (in meters) to consider to calculate the built up density around each catch point
-path_to_csv_households_population<-"df_households_loc_pop_civ.csv"
-# For LU/LC
+# Land use / land cover  (source: own) #TODO next dev: automatic implementation with Esa Global Land Cover map 
+use_lu_lc<-TRUE
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
-buffer_sizes_lulc_meters<-c(1000,2000)
-# For pedology
+# Pedology (source: own)
+use_pedology<-TRUE
 path_to_pedology_dataset<-"pedology/pedo_final_32630.tif"
 hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are considered hydromorphic.   for CIV: c(11,14,5,2,13)  for BF: c(2,3,8,9,10)
-# For road network
+# Road network (source: own)  #TODO next dev: automatic implementation with OpenStreetMap ? 
+use_roads<-TRUE
 path_to_road_network<-""
-# For the raifall
+# Rainfall (source: GPM or TAMSAT)
+use_rainfall<-TRUE
+source_rainfall<-"GPM"  # choice between {"GPM","TAMSAT"}
+lag_max_days_rainfall<-40
 resample_rainfall<-TRUE
 size_output_grid_resample_rainfall<-250 # if resample_rainfall is TRUE : size of output grid after bilinear resampling (in meters)
-# For the wind
+# Vegetation indices (source: MODIS)
+use_vegetation_indices<-TRUE
+lag_max_days_veget_indices<-40
+# Temperature (source: MODIS)
+use_temperature<-TRUE
+lag_max_days_temperature<-40
+# Evapotranspiration (source: MODIS)
+use_evapotranspiration<-TRUE
+lag_max_days_evapotranspiration<-40
+# Moon radiance (source: IMCCE)
+use_moon<-TRUE
+# Night lights intensity (source: NOAA VIIRS DNB)
+use_nightlights<-TRUE
+# Wind (source: ERA-5)
+use_wind<-TRUE
 resample_wind<-TRUE
 size_output_grid_resample_wind<-250 # if resample_wind is TRUE : size of output grid after bilinear resampling (in meters)
 
-
-## Additional paramters to set for integration of the data 
-# Buffer sizes, within which the raster statistics will be computed (radius in meters)
+## Buffer sizes, within which the raster statistics will be computed (radius in meters)
 buffer_sizes_meters=c(500,1000,2000) 
-# Number of lag days for each source (ie number of days separating the human catch landing date and the first date of interest for the given source)
-lag_max_days_temperature<-40
-lag_max_days_veget_indices<-40
-lag_max_days_evapotranspiration<-40
-lag_max_days_rainfall<-40
 
 
 ########################################################################################################################
@@ -251,8 +227,21 @@ path_to_imcce_folder<-file.path(path_to_processing_folder,"IMCCE_Moon")
 directories<-list(path_to_dem_folder,path_to_hrsl_folder,path_to_modislst_folder,path_to_rainfall_folder,path_to_nighttime_folder,path_to_erawind_folder,path_to_modisveget_folder,path_to_imcce_folder,path_to_modisevapo_folder)
 lapply(directories, dir.create)
 
-## Set ROI as sp SpatialPolygon object in epsg 4326
-roi_sp_4326<-rgdal::readOGR(path_to_roi_vector)
+## Open the dataset with location and dates of Human Catch Landings
+df_dates_locations_hlc<-read.csv(path_to_csv_hlc_dates_loc)
+## Turn dataframe to sp SpatialPointsDataFrame
+dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
+# Create a ID column
+dates_locations_hlc_sp$ID<-seq(1,nrow(dates_locations_hlc_sp),1)
+
+## Set ROI as sp SpatialPolygon object in epsg 4326, UTM and MODIS projection
+# extend a bit the size of the bbox (of 0.05°)
+bbox_4326<-bbox(dates_locations_hlc_sp)
+bbox_4326[,1]=bbox_4326[,1]-0.05
+bbox_4326[,2]=bbox_4326[,2]+0.05
+roi_sp_4326<-bbox2SP(bbox_4326[2,2],bbox_4326[2,1],bbox_4326[1,1],bbox_4326[1,2],proj4string=CRS("+init=epsg:4326"))
+
+#roi_sp_4326<-rgdal::readOGR(path_to_roi_vector)
 
 ## Get UTM WGS84 Zone number of the ROI. from https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
 cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
@@ -304,34 +293,13 @@ buffer_sizes_degrees<-fun_convert_meters_to_degrees(buffer_sizes_meters,mean_lat
 roi_sp_utm <- spTransform(roi_sp_4326, CRS(paste0("+init=epsg:",epsg)))
 roi_sp_modis_project <- spTransform(roi_sp_4326, modis_crs)
 
-## Retrieve the dataset with location and dates of Human Catch Landings
-if (!is.null(path_to_database)){
-  # Connect to project database
-  react_db <- dbConnect(RSQLite::SQLite(),path_to_database)
-  # Get query to retrieve dates and locations of human landing catches and execute it. The query is stored on my github repository
-  sql_query_hlc_dates_location<-paste(readLines(path_to_sql_query_dates_loc_hlc), collapse="\n")
-  df_dates_locations_hlc<-dbGetQuery(react_db, sql_query_hlc_dates_location)
-} else {
-  df_dates_locations_hlc<-read.csv(path_to_csv_dates_loc)
-}
 
-## Filter data only for CIV
-df_dates_locations_hlc <- df_dates_locations_hlc %>% filter (codepays_fk=="CI")
-## Turn dataframe to sp SpatialPointsDataFrame
-dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locations_hlc$longitude,df_dates_locations_hlc$latitude),data=df_dates_locations_hlc,proj4string=CRS("+init=epsg:4326"))
-#dates_locations_hlc_sp_modis_proj<-spTransform(dates_locations_hlc_sp_4326_proj,modis_crs)
-
-# Check that all the points lie within the ROI 
-bbox_hlc<-bbox(dates_locations_hlc_sp)
-bbox_roi<-bbox(roi_sp_4326)
-if (bbox_hlc[1,1]<bbox_roi[1,1]|bbox_hlc[1,2]>bbox_roi[2,1]|bbox_hlc[2,1]<bbox_roi[2,1]||bbox_hlc[2,2]>bbox_roi[2,2]){
-  stop("Some points of your HLC data lie outside of the ROI\n")
-}
-
-# To delete when the coordinates of the points are validated
+## For now crop ROI 
+roi_sp_4326<-readOGR("ROI.kml")
 dates_locations_hlc_sp<-crop(dates_locations_hlc_sp,extent(roi_sp_4326))
-# Create a ID column
-dates_locations_hlc_sp$ID<-seq(1,nrow(dates_locations_hlc_sp),1)
+roi_sp_utm <- spTransform(roi_sp_4326, CRS(paste0("+init=epsg:",epsg)))
+roi_sp_modis_project <- spTransform(roi_sp_4326, modis_crs)
+
 
 ###############################################################################################################
 ############################### A. Static data ################################

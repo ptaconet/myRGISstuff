@@ -70,6 +70,8 @@ df_capturedeterm_ci_niv1$baro_id<-NA
 df_capturedeterm_ci_niv1$row_id_pk<-NULL
 colnames(df_capturedeterm)[which(colnames(df_capturedeterm)=="idmoustique_pk")]="idmoustique"
 df_capturedeterm<-rbind(df_capturedeterm,df_capturedeterm_ci_niv1)
+df_capturedeterm$postedecapture<-gsub("int","i",df_capturedeterm$postedecapture)
+df_capturedeterm$postedecapture<-gsub("ext","e",df_capturedeterm$postedecapture)
 df_capturedeterm$idpostedecapture<-paste0(df_capturedeterm$enquete,df_capturedeterm$codevillage_fk,df_capturedeterm$pointdecapture,df_capturedeterm$postedecapture)
 dbWriteTable(react_gpkg,"raw_capturedeterm",df_capturedeterm)
 
@@ -102,7 +104,7 @@ st_write(ground_truth_data_bf_raw, path_to_gpkg_database, "lu_lc_ground_truth_bf
 ground_truth_data_bf_revised<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/groundtruth_bf.gpkg")
 st_write(ground_truth_data_bf_revised, path_to_gpkg_database, "lu_lc_ground_truth_bf_rev", update = TRUE)
 
-# Pedology
+# Pedology (raster)
 path_to_pedology_civ<-"/home/ptaconet/Documents/react/data_CIV/pedology/pedo_final_32630.tif"
 path_to_pedology_bf<-"/home/ptaconet/Documents/react/data_BF/pedology/pedo_final_32630.tif"
 gdal_translate(path_to_pedology_civ,path_to_gpkg_database,ot="Float32",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_civ"))
