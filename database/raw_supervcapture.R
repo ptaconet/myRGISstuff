@@ -553,12 +553,23 @@ all_data$pointdecapture<-as.integer(all_data$pointdecapture)
 
 all_data <- all_data %>% filter (!(is.na(latitude)))
 
-# on corrige qq données erronnés
+# on corrige les données erronnés
 all_data$codevillage[which(all_data$datecapture %in% c("2017-04-15","2017-04-16") & all_data$codevillage=="NAL")]="NAK"
 all_data$codevillage[which(all_data$datecapture %in% c("2017-11-09","2017-11-10","2018-01-17","2018-01-18") & all_data$codevillage=="PER")]="PAL"
 all_data$nummission[which(all_data$nummission==1 & all_data$datecapture=="2018-01-17" & all_data$codevillage=="LAG")]=7
-all_data$codevillage[which(all_data$codevillage=="NAV" & all_data$codepays=="CI")]="NAA"
+all_data$codevillage[which(all_data$codevillage=="NAV" & all_data$codepays=="CI")]="NAA" # a cause de homonimie avec BF
 all_data$codevillage[which(all_data$latitude<9 & all_data$codevillage=="NAA" & all_data$codepays=="CI")]="NAM"
+all_data$codevillage[which(all_data$latitude<9 & all_data$codevillage=="KOL" & all_data$codepays=="CI")]="BLA"
+all_data$codevillage[which(all_data$codevillage=="NOK" & all_data$idpostedecapture=="6NOK2e")]="NAK"
+all_data$codevillage[which(all_data$codevillage=="LAG" & all_data$idpostedecapture=="3LAG2i")]="KAT"
+all_data$codevillage[which(all_data$codevillage=="NON" & all_data$idpostedecapture=="6NON1e")]="LAG"
+all_data$postedecapture[which(all_data$idpostedecapture=="2TAK2NA")]<-"e"
+all_data$codevillage[which(all_data$codevillage=="KOU" & all_data$codepays=="CI")]<-"KON" # a cause de homonimie avec BF
+all_data$codevillage[which(all_data$codevillage=="NON" & all_data$codepays=="CI" & all_data$latitude>=9.48)]<-"NOW"
 
+
+#num_rows_by_week_year_civ<-all_data %>% filter(codepays=="CI") %>% group_by(week = lubridate::week(datedebut),year=year(datedebut),nummission) %>% summarise(value = n())
+
+all_data$idpointdecapture<-paste0(all_data$nummission,all_data$codevillage,all_data$pointdecapture)
 all_data$idpostedecapture<-paste0(all_data$nummission,all_data$codevillage,all_data$pointdecapture,all_data$postedecapture)
 

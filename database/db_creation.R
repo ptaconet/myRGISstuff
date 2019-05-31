@@ -37,6 +37,12 @@ query<-"SELECT * FROM village"
 villages<-dbGetQuery(amal_db, query)
 villages$Latitude <- as.numeric(gsub(",",".",villages$Latitude))
 villages$Longitude <- as.numeric(gsub(",",".",villages$Longitude))
+villages$Latitude[which(villages$codevillage_pk=="NAM")]<-8.8845
+villages$Longitude[which(villages$codevillage_pk=="NAM")]<--5.75
+villages$Latitude[which(villages$codevillage_pk=="KOL")]<-9.288
+villages$Longitude[which(villages$codevillage_pk=="KOL")]<--5.524
+villages$Latitude[which(villages$codevillage_pk=="BLA")]<-8.948
+villages$Longitude[which(villages$codevillage_pk=="BLA")]<--5.652
 villages$Latitude[which(is.na(villages$Latitude))]<-9
 villages$Longitude[which(is.na(villages$Longitude))]<--5
 villages_sf<-st_as_sf(villages,coords =  c("Longitude", "Latitude"), crs = 4326 )
@@ -48,6 +54,15 @@ query<-"SELECT * FROM menage"
 menages<-dbGetQuery(amal_db, query)
 menages$Latitude <- as.numeric(gsub(",",".",menages$Latitude))
 menages$Longitude <- as.numeric(gsub(",",".",menages$Longitude))
+menages$codevillage_fk[which(menages$codevillage_fk=="KOL" & menages$codemenage_pk %in% c("LOK062","LOK012"))]<-"LOK"
+index_menages_nam<-which(is.na(menages$Latitude) & menages$codevillage_fk=="NAA")
+codemenage_menages_nam<-menages$codemenage_pk[index_menages_nam]
+menages$codemenage_pk[index_menages_nam]<-gsub("NAA","NAM",menages$codemenage_pk[index_menages_nam])
+menages$codevillage_fk[index_menages_nam]="NAM"
+index_menages_bla<-which(is.na(menages$Latitude) & menages$codevillage_fk=="KOL")
+codemenage_menages_bla<-menages$codemenage_pk[index_menages_bla]
+menages$codemenage_pk[index_menages_bla]<-gsub("KOL","BLA",menages$codemenage_pk[index_menages_bla])
+menages$codevillage_fk[index_menages_bla]="BLA"
 menages$Latitude[which(is.na(menages$Latitude))]<-9
 menages$Longitude[which(is.na(menages$Longitude))]<--5
 menages_sf<-st_as_sf(menages,coords =  c("Longitude", "Latitude"), crs = 4326 )
@@ -57,6 +72,10 @@ st_write(menages_sf, path_to_gpkg_database, "raw_menages", update = TRUE)
 # raw_individus
 query<-"SELECT * FROM individu"
 individus<-dbGetQuery(amal_db, query)
+individus$codeindividu_pk[which(individus$codemenage_fk %in% codemenage_menages_nam)]<-gsub("NAA","NAM",individus$codeindividu_pk[which(individus$codemenage_fk %in% codemenage_menages_nam)])
+individus$codemenage_fk[which(individus$codemenage_fk %in% codemenage_menages_nam)]<-gsub("NAA","NAM",individus$codemenage_fk[which(individus$codemenage_fk %in% codemenage_menages_nam)])
+individus$codeindividu_pk[which(individus$codemenage_fk %in% codemenage_menages_bla)]<-gsub("KOL","BLA",individus$codeindividu_pk[which(individus$codemenage_fk %in% codemenage_menages_bla)])
+individus$codemenage_fk[which(individus$codemenage_fk %in% codemenage_menages_bla)]<-gsub("KOL","BLA",individus$codemenage_fk[which(individus$codemenage_fk %in% codemenage_menages_bla)])
 dbWriteTable(react_gpkg,"raw_individus",individus)
 
 # raw_capturedeterm

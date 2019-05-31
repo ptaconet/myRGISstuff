@@ -90,9 +90,9 @@ coords_median_postecapture_civ$codevillage<-substr(coords_median_postecapture_ci
 coords_median_postecapture_civ$pointdecapture<-substr(coords_median_postecapture_civ$idpostedecapture,5,5)
 
 # On corrige à la main les dates manquantes
-coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="GUE" & coords_median_postecapture_civ$nummission==1)]<-"2016-09-21"
-coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="KOL" & coords_median_postecapture_civ$nummission==1)]<-"2016-09-23"
-coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="KOU" & coords_median_postecapture_civ$nummission==3)]<-"2017-05-25"
+#coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="GUE" & coords_median_postecapture_civ$nummission==1)]<-"2016-09-21"
+#coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="KOL" & coords_median_postecapture_civ$nummission==1)]<-"2016-09-23"
+#coords_median_postecapture_civ$date_hlc[which(coords_median_postecapture_civ$codevillage=="KOU" & coords_median_postecapture_civ$nummission==3)]<-"2017-05-25"
 
 
 
@@ -102,7 +102,12 @@ df_capturedeterm<-dbGetQuery(react_gpkg, query)
 df_capturedeterm$date<-as.Date(df_capturedeterm$date)-1
 ## Pour le BF
 df_capturedeterm_bf<-df_capturedeterm %>% filter(codepays_fk=="BF")
-df_capturedeterm_bf<-right_join(df_capturedeterm_bf,coords_median_postecapture_bf,by="idpostedecapture")
+df_capturedeterm_bf<-full_join(df_capturedeterm_bf,coords_median_postecapture_bf,by="idpostedecapture")
 df_capturedeterm_bf$diff_date<-df_capturedeterm_bf$date-df_capturedeterm_bf$date_from_dieudo
 ## Pour le BF on a l'air OK !!
 ## Pour la CIV
+df_capturedeterm_civ<-df_capturedeterm %>% filter(codepays_fk=="CI")
+df_capturedeterm_civ<-left_join(df_capturedeterm_civ,coords_median_postecapture_civ,by="idpostedecapture")
+# idpostedecapture pour lesquels on a des données d'identification de moustique mais pas de données de supervision capture
+idpostedecapture_missing<-df_capturedeterm_civ %>% filter(is.na(nummission))
+idpostedecapture_missing<-sort(unique(idpostedecapture_missing$idpostedecapture))

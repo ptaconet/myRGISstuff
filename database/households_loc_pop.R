@@ -14,6 +14,41 @@ ORDER BY raw_villages.codevillage_pk"
 df_households_loc_pop<-dbGetQuery(react_gpkg, sql_query_households_loc_pop)
 
 # Tidy the dataset
+
+# Attention les données de localisation des ménages pour BLA et NAM sont FAUSSES !! on ne les intégre ici que pour avoir l'étendue du village.
+# Cependant les données de population sont justes.
+df_households_loc_pop$latitude[which(df_households_loc_pop$village=="BLA")]<-8.948
+df_households_loc_pop$longitude[which(df_households_loc_pop$village=="BLA")]<--5.652
+df_households_loc_pop$latitude[which(df_households_loc_pop$village=="NAM")]<-8.8845
+df_households_loc_pop$longitude[which(df_households_loc_pop$village=="NAM")]<--5.75
+
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="BLA028")]<-8.94788
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="BLA028")]<--5.65341
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="BLA030")]<-8.94994
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="BLA030")]<--5.65308
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="BLA032")]<-8.94965
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="BLA032")]<--5.65098
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="BLA033")]<-8.94786
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="BLA033")]<--5.65146
+
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM044")]<-8.8838
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM044")]<--5.7512
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM045")]<-8.8879
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM045")]<--5.7504
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM046")]<-8.8880
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM046")]<--5.7485
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM047")]<-8.8863
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM047")]<--5.7476
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM048")]<-8.8842
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM048")]<--5.7490
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM049")]<-8.8844
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM049")]<--5.7497
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM050")]<-8.8823
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM050")]<--5.7501
+df_households_loc_pop$latitude[which(df_households_loc_pop$codemenage=="NAM051")]<-8.8846
+df_households_loc_pop$longitude[which(df_households_loc_pop$codemenage=="NAM051")]<--5.7513
+
+
 df_households_loc_pop$latitude[which(df_households_loc_pop$latitude==9)]<-NA
 df_households_loc_pop$longitude[which(df_households_loc_pop$longitude==-5)]<-NA
 
@@ -27,13 +62,14 @@ df_households_loc_pop_without_coords<-merge(df_households_loc_pop_without_coords
 df_households_loc_pop<-rbind(df_households_loc_pop,df_households_loc_pop_without_coords)
 
 # Correction des points abérrants
-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KOL"),c("latitude","longitude")]<-c(9.28812,-5.52354)
 
 df_households_loc_pop[571,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KAR"),c("latitude","longitude")]
 df_households_loc_pop[581,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KAR"),c("latitude","longitude")]
 df_households_loc_pop[1521,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="NBO"),c("latitude","longitude")]
 df_households_loc_pop[1734,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="NOT"),c("latitude","longitude")]
-df_households_loc_pop[2769:2778,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KOL"),c("latitude","longitude")]
-df_households_loc_pop[686:687,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KOL"),c("latitude","longitude")]
 df_households_loc_pop[309,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="FEL"),c("latitude","longitude")]
 
+# Ajout attention
+df_households_loc_pop$note_importante<-NA
+df_households_loc_pop$note_importante[which(df_households_loc_pop$village %in% c("BLA","NAM"))]<-"Attention les données de localisation (X et Y) des ménages pour BLA et NAM sont FAUSSES !! on ne les a intégré ici que pour avoir l'étendue spatiale maximale du village. Cependant les données de population (nombre d’habitants) sont justes."
+  
