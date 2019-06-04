@@ -3,13 +3,13 @@ require(RSQLite)
 require(dplyr)
 #react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_empty_database)
 sql_query_households_loc_pop<-"SELECT
-raw_menages.codemenage_pk as codemenage, count(codeindividu_pk) as population, raw_menages.Y as latitude,raw_menages.X as longitude, raw_villages.codevillage_pk as village,raw_villages.codepays_fk
+raw_menages.codemenage as codemenage, count(codeindividu) as population, raw_menages.Y as latitude,raw_menages.X as longitude, raw_villages.codevillage as village,raw_villages.codepays
 FROM
 raw_individus
-JOIN raw_menages on raw_individus.codemenage_fk=raw_menages.codemenage_pk
-JOIN raw_villages on raw_villages.codevillage_pk=raw_menages.codevillage_fk
-GROUP BY raw_individus.codemenage_fk,raw_menages.codemenage_pk,raw_menages.X,raw_menages.Y,raw_villages.codevillage_pk,raw_villages.codepays_fk
-ORDER BY raw_villages.codevillage_pk"
+JOIN raw_menages on raw_individus.codemenage=raw_menages.codemenage
+JOIN raw_villages on raw_villages.codevillage=raw_menages.codevillage
+GROUP BY raw_individus.codemenage,raw_menages.codemenage,raw_menages.X,raw_menages.Y,raw_villages.codevillage,raw_villages.codepays
+ORDER BY raw_villages.codevillage"
 
 df_households_loc_pop<-dbGetQuery(react_gpkg, sql_query_households_loc_pop)
 

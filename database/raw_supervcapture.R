@@ -566,6 +566,10 @@ all_data$codevillage[which(all_data$codevillage=="NON" & all_data$idpostedecaptu
 all_data$postedecapture[which(all_data$idpostedecapture=="2TAK2NA")]<-"e"
 all_data$codevillage[which(all_data$codevillage=="KOU" & all_data$codepays=="CI")]<-"KON" # a cause de homonimie avec BF
 all_data$codevillage[which(all_data$codevillage=="NON" & all_data$codepays=="CI" & all_data$latitude>=9.48)]<-"NOW"
+all_data$codevillage[which(all_data$codevillage=="KOL" & all_data$codepays=="CI" & all_data$nummission==7)]<-"NOW"
+all_data$codevillage[which(all_data$codevillage=="KAM")]<-"PAL"
+all_data$codevillage[which(all_data$codevillage=="BAR")]<-"PAL"
+all_data<-all_data %>% filter(!(codevillage %in% c("YOU","WUL")))
 
 
 #num_rows_by_week_year_civ<-all_data %>% filter(codepays=="CI") %>% group_by(week = lubridate::week(datedebut),year=year(datedebut),nummission) %>% summarise(value = n())
