@@ -10,7 +10,12 @@
 
 
 # Local variable (to set by the user)
-kml_path="/home/ptaconet/Téléchargements/kml_bobo.kml"
+#kml_path="/home/ptaconet/Téléchargements/kml_bobo.kml"
+lat_min<-11.06246
+lon_min<--4.384058
+lat_max<-11.237
+lon_max<--4.249606
+
 #apiKey = scan("/home/ptaconet/Documents/react/r_bingmaps/bingAPIkey.txt",what="")
 apiKey="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
 imagerySet="Aerial"
@@ -21,7 +26,6 @@ mapsize_width=1500  #max: 2000
 mapsize_height=1500 # max: 1500
 zoomLevel=19
 cell_size=10000 # width/height of the big tifs to create (unit: meters)
-epsg_utm=32630 # UTM EPSG of the AOI 
 
 # Install / call useful libraries
 if(!require(sf)){
@@ -54,17 +58,31 @@ require(raster)
 source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/get_bingmaps_images/download_and_georeference_bingmaps_data.R")
 source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/mosaic_tif_images.R")
 
-# read kml as sf object
-kml_sf <- st_read(kml_path)
+## Get UTM WGS84 Zone number of the ROI. from https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
+cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
+utm_zone_number<-(floor((lon_min + 180)/6) %% 60) + 1
+if(lat_max>0){ # if latitudes are North
+  epsg_utm<-as.numeric(paste0("326",utm_zone_number))
+} else { # if latitude are South
+  epsg_utm<-as.numeric(paste0("325",utm_zone_number))
+}
+
+# Convert area of interest to sf object
+df <- data.frame(lon=c(lon_min,lon_max,lon_max,lon_min,lon_min), 
+                 lat=c(lat_min,lat_min,lat_max,lat_max,lat_min))
+
+poly <- st_sf(st_sfc(st_polygon(list(as.matrix(df)))), crs = 4326)
+
+
 
 # Convert to EPSG 32630 (to get the units in meters instead of degrees). EPSG 32630 is the one covering our area of study (Burkina Faso and north Cote d'Ivoire)
-kml_sf <- st_transform(kml_sf,crs=epsg_utm)
+poly <- st_transform(poly,crs=epsg_utm)
 
 # Make grid over the bounding box. We want 10 km square grids, so as to be able to use them on the tablet. 
-grid_10km=st_make_grid(kml_sf,what="polygons",cellsize = cell_size)
+grid_10km=st_make_grid(poly,what="polygons",cellsize = cell_size)
 
 # We convert the grid to geopackage and we save it
-st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"bobo_grid_10km.gpkg"))
+st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"raster_10km.gpkg"))
 
 # Loop on each 10km square tile
 for (i in 2:length(grid_10km)){
