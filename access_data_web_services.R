@@ -27,7 +27,7 @@ path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to 
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
 path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file containing the credential to the NASA servers (EarthData)
 
-## Path to the input dataset (date, lat, lon of HLC) (response variable)
+## Path to the input dataset (date, lat, lon of HLC)
 path_to_csv_hlc_dates_loc<-"df_hlc.csv"
 
 ## Covariates to retrieve. For each covariate that is used (use_xxx<-TRUE), the related parameters must be set
@@ -52,11 +52,17 @@ hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are c
 use_roads<-TRUE
 path_to_road_network<-""
 # Rainfall (source: GPM or TAMSAT)
-use_rainfall<-TRUE
-source_rainfall<-"GPM"  # choice between {"GPM","TAMSAT"}
+use_daily_rainfall<-TRUE
+source_daily_rainfall<-"GPM"  # choice between {"GPM","TAMSAT"}
 lag_max_days_rainfall<-40
-resample_rainfall<-TRUE
-size_output_grid_resample_rainfall<-250 # if resample_rainfall is TRUE : size of output grid after bilinear resampling (in meters)
+resample_daily_rainfall<-TRUE
+size_output_grid_resample_daily_rainfall<-250 # if resample_rainfall is TRUE : size of output grid after bilinear resampling (in meters)
+# Rainfall (duration of the HLC)
+use_half_hourly_rainfall<-TRUE
+hh_rainfall_hour_begin<-18
+hh_rainfall_hour_end<-8
+resample_hhourly_rainfall<-TRUE
+size_output_grid_resample_hhourly_rainfall<-250 # if resample_rainfall is TRUE : size of output grid after bilinear resampling (in meters)
 # Vegetation indices (source: MODIS)
 use_vegetation_indices<-TRUE
 lag_max_days_veget_indices<-40
@@ -72,6 +78,8 @@ use_moon<-TRUE
 use_nightlights<-TRUE
 # Wind (source: ERA-5)
 use_wind<-TRUE
+wind_hour_begin<-18
+wind_hour_end<-8
 resample_wind<-TRUE
 size_output_grid_resample_wind<-250 # if resample_wind is TRUE : size of output grid after bilinear resampling (in meters)
 
@@ -128,7 +136,8 @@ setwd(path_to_processing_folder)
 
 ## Urls to the various OpenDAP servers
 url_modis_opendap<-"https://opendap.cr.usgs.gov/opendap/hyrax"
-url_gpm_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
+url_gpm_daily_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGDF.06"
+url_gpm_hhourly_opendap<-"https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3/GPM_3IMERGHH.06"
 url_tamsat_data<-"https://www.tamsat.org.uk/public_data/TAMSAT3/zip/"
 url_imcce_webservice<-"http://vo.imcce.fr/webservices/miriade/ephemcc_query.php?"
 url_noaa_nighttime_webservice<-"https://gis.ngdc.noaa.gov/arcgis/rest/services/NPP_VIIRS_DNB/Monthly_AvgRadiance/ImageServer/exportImage"
@@ -212,6 +221,11 @@ fun_preprocess_era_product<-function(path_to_output_erawind_data,variable_name,r
   return(brick_era)
 }
 
+## To convert meters to degrees
+fun_convert_meters_to_degrees<-function(buffer_size_meters,mean_latitude){
+  buffer_size_degrees <- buffer_size_meters / (111.32 * 1000 * cos(mean_latitude * ((pi / 180))))
+  return(buffer_size_degrees)
+}
 
 ## Set the paths of output folders / files and create them
 path_to_dem_folder<-file.path(path_to_processing_folder,"DEM_SRTM") # Path to the folder where the DEM raw data will be stored
@@ -235,10 +249,11 @@ dates_locations_hlc_sp<-SpatialPointsDataFrame(coords=data.frame(df_dates_locati
 dates_locations_hlc_sp$ID<-seq(1,nrow(dates_locations_hlc_sp),1)
 
 ## Set ROI as sp SpatialPolygon object in epsg 4326, UTM and MODIS projection
-# extend a bit the size of the bbox (of 0.05°)
+# extend a bit the size of the bbox (of the max of the buffer size + 0.05°)
 bbox_4326<-bbox(dates_locations_hlc_sp)
-bbox_4326[,1]=bbox_4326[,1]-0.05
-bbox_4326[,2]=bbox_4326[,2]+0.05
+mean_latitude<-mean(bbox_4326[2,])
+bbox_4326[,1]=bbox_4326[,1]-0.05-fun_convert_meters_to_degrees(max(buffer_sizes_meters),mean_latitude)
+bbox_4326[,2]=bbox_4326[,2]+0.05+fun_convert_meters_to_degrees(max(buffer_sizes_meters),mean_latitude)
 roi_sp_4326<-bbox2SP(bbox_4326[2,2],bbox_4326[2,1],bbox_4326[1,1],bbox_4326[1,2],proj4string=CRS("+init=epsg:4326"))
 
 #roi_sp_4326<-rgdal::readOGR(path_to_roi_vector)
@@ -281,12 +296,6 @@ loc <- rgrass7::initGRASS(path_to_grassApplications_folder, home=getwd(), gisDba
 execGRASS("g.proj",flags="c",parameters = list(proj4=paste0("+proj=utm +zone=",utm_zone_number," +datum=WGS84 +units=m +no_defs")))
 
 ## Get buffer size in degrees
-fun_convert_meters_to_degrees<-function(buffer_size_meters,mean_latitude){
-  buffer_size_degrees <- buffer_size_meters / (111.32 * 1000 * cos(mean_latitude * ((pi / 180))))
-  return(buffer_size_degrees)
-}
-
-mean_latitude<-mean(bbox(roi_sp_4326)[2,])
 buffer_sizes_degrees<-fun_convert_meters_to_degrees(buffer_sizes_meters,mean_latitude)
 
 ## Set ROI as sp SpatialPolygon object in UTM epsg and in MODIS projection
@@ -831,7 +840,6 @@ index_opendap_modislst_lat_min<-which.min(abs(opendap_modis_lst_YDim_index-roi_b
 if(use_temperature){
   cat(" B.1. Integrating temperature data ...\n")
   
-
 # Il y a deux résolutions temporelles disponibles: 1 jour et 8 jours. Pour chaque résolution temporelle il y a 2 fichiers disponibles: le fichier issu de Terra et le fichier issu de Aqua (relevés distants d'à peu près 2/3 h entre Terra et Aqua). Enfin pour chaque fichier il y a 2 relevés: température diurne et température nocturne. La différence entre Terra et Aqua est l'heure de relevé, ainsi que l'étendue des données disponibles (ie couverture nuageuse au moment de l'acquisition)
 
 ### Questions à répondre :
@@ -862,7 +870,7 @@ if(use_temperature){
 
 ## For the quality control of MODIS layers : https://www.r-bloggers.com/modis-qc-bits/
 
-
+## MODIS LST QC : bad quality pixels are directly set to NA in the LST layers. Hence we consider all available pixels as good quality. 
 ##############################################################
 #### B.1.1 - Download the data ####
 ##############################################################
@@ -968,13 +976,13 @@ brick_lst_night <- brick_lst_night - 273.15
 # small=TRUE means that each time the buffer intersects a non NA cell it takes into account the cell value
 # sp=TRUE means that the extracted values are added to the data.frame of the Spatial object
 
-dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,proj4string(brick_lst_day))
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(brick_lst_day))
 
 for (i in 1:length(buffer_sizes_meters)){
-  dates_locations_hlc_sp <- raster::extract(brick_lst_day, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-  dates_locations_hlc_sp <- raster::extract(brick_lst_night, dates_locations_hlc_sp, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_day))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_day))],"_",buffer_sizes_meters[i])  # rename column
-  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_night))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% names(brick_lst_night))],"_",buffer_sizes_meters[i])  # rename column
+  locations_hlc_sp_this_date <- raster::extract(brick_lst_day, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  locations_hlc_sp_this_date <- raster::extract(brick_lst_night, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_lst_day))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_lst_day))],"_",buffer_sizes_meters[i])  # rename column
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_lst_night))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_lst_night))],"_",buffer_sizes_meters[i])  # rename column
 }
 
 }
@@ -1001,7 +1009,7 @@ if(use_vegetation_indices){
 # - we convert this date to a integer "number of days since 2000-01-01" which is the time attribute for the openDap query and we divide by 16 to get the index since there is one acquisition every 16 days
 # - we download the data using the indexes of the lat and lon coordinates provided as parameters
 
-
+# QC: As for MODIS LST, pixels of too bad quality are not produced (hence NA in the raster downloaded)
 ##############################################################
 #### B.2.1 - Download the data ####
 ##############################################################
@@ -1049,7 +1057,6 @@ fun_build_modis_veget_opendap_url<-function(date_catch){
 }
 
 ## Download data
-
 modisveget_list_paths<-NULL
 modisveget_list_names<-NULL
 
@@ -1105,8 +1112,12 @@ brick_modisveget<-brick(brick_modisveget)
 ########### B.2.3 Calculate stats within the buffer ###############
 #####################################
 
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(brick_modisveget))
 # Extract mean of vegetation indices for each raster 
-dates_locations_hlc_sp_modis_proj <- raster::extract(brick_modisveget, dates_locations_hlc_sp_modis_proj, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+for (i in 1:length(buffer_sizes_meters)){
+  locations_hlc_sp_this_date <- raster::extract(brick_modisveget, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_modisveget))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_modisveget))],"_",buffer_sizes_meters[i])  # rename column
+}
 
 cat("END integration vegetation indices data\n")
 }
@@ -1208,17 +1219,22 @@ brick_modisevapo<-brick(brick_modisevapo)
 ########### B.3.3 Calculate stats within the buffer ###############
 #####################################
 
-locations_hlc_sp_this_date_modis_proj <- raster::extract(brick_modisevapo, locations_hlc_sp_this_date_modis_proj, buffer=buffer_size_meters,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(brick_modisevapo))
+# Extract mean of vegetation indices for each raster 
+for (i in 1:length(buffer_sizes_meters)){
+  locations_hlc_sp_this_date <- raster::extract(brick_modisevapo, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_modisevapo))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_modisevapo))],"_",buffer_sizes_meters[i])  # rename column
+}
 
 cat("END integration evapotranspiration data\n")
 }
 
 #####################################
-########### B.4. Rainfall ###############
+########### B.4. Daily Rainfall ###############
 #####################################
 
-if(use_rainfall){
-  cat("  B.4. Integrating rainfall data ...\n")
+if(use_daily_rainfall){
+  cat("  B.4. Integrating daily rainfall data ...\n")
   
 ## GMP Websites
 # TRMM/GPM doc: https://disc2.gesdisc.eosdis.nasa.gov/data/TRMM_L3/TRMM_3B43/doc/README.TRMM_V7.pdf
@@ -1247,48 +1263,44 @@ if(use_rainfall){
 #### B.4.1 - Download the data ####
 ##############################################################
 
-# We retrieve the data 15 days before the date_epidemio_campain (source of the duration: thèse Nico)
-
-time_range<-as.character(c(this_date_hlc-lag_max_days_rainfall,this_date_hlc))
-dates <-seq(as.Date(time_range[1]),as.Date(time_range[2]),1)
+date_rainfall<-seq(this_date_hlc,this_date_hlc-lag_max_days_rainfall,-1)
 
 # Function to build the OpenDap URL to dowload GPM 1km data. input parameters : date
 
-fun_build_gpm_opendap_url<-function(date_catch){
+fun_build_gpm_daily_opendap_url<-function(date_catch){
   
   year<-format(date_catch,'%Y')
   month<-format(date_catch,'%m')
   product_name<-paste0("3B-DAY.MS.MRG.3IMERG.",gsub("-","",date_catch),"-S000000-E235959.V06.nc4.nc4")
   
   # We use the precipitationCal variable, as explained in the technical doc (https://pps.gsfc.nasa.gov/Documents/IMERG_doc_190313.pdf , p.39) : Note  well  that  HQprecipitation only includes  microwave  data  (hence  “HQ”),  meaning  it  has significant gaps.  precipitationCal is the complete estimate that most users will want to access
-  url_product<-paste0(url_gpm_opendap,"/",year,"/",month,"/",product_name,"?precipitationCal[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
+  url_product<-paste0(url_gpm_daily_opendap,"/",year,"/",month,"/",product_name,"?precipitationCal[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
   
   return(url_product)
 }
 
-## Download the data
 
+## Download the data
 rainfall_list_paths<-NULL
 #gpm_list_names<-NULL
 
-dates<-rev(dates)
-if (source_rainfall=="GPM"){
+if (source_daily_rainfall=="GPM"){
 for (i in 1:length(dates)){
-    cat(paste0("Downloading GPM data for the ROI and for date ",dates[i],"\n"))
+    cat(paste0("Downloading GPM data for the ROI and for date ",date_rainfall[i],"\n"))
     # build the url of the dataset
-    url_opendap<-fun_build_gpm_opendap_url(dates[i])
+    url_opendap<-fun_build_gpm_daily_opendap_url(date_rainfall[i])
     # Download the data
-    path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_",gsub("-","",dates[i]),".nc4"))
+    path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_d_",gsub("-","",date_rainfall[i]),".nc4"))
     rainfall_list_paths<-c(rainfall_list_paths,path_to_output_gpm_data)
-    #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(dates[i] ,this_date_hlc , units = c("days"))))))
+    #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(date_rainfall[i] ,this_date_hlc , units = c("days"))))))
     if (!(file.exists(path_to_output_gpm_data))){
       httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
     } else {
-      cat(paste0("Data is already existing for date ",dates[i],"\n"))
+      cat(paste0("Data is already existing for date ",date_rainfall[i],"\n"))
     }
   }
-} else if (source_rainfall=="TAMSAT"){
-  years<-unique(year(dates))
+} else if (source_daily_rainfall=="TAMSAT"){
+  years<-unique(year(date_rainfall))
   # Donwload the data (whole year, because faster than 40 days separately)
   for (i in 1:length(years)){
     cat(paste0("Downloading TAMSAT data for the ROI and for year ",years[i],"\n"))
@@ -1301,12 +1313,14 @@ for (i in 1:length(dates)){
       cat(paste0("Data is already existing for date ",years[i],"\n"))
     }
     # Retrieve paths for the dates of interest
-    for (i in 1:length(dates)){
-      tamsat_file_path<-file.path(path_to_rainfall_folder,year(dates[i]),sprintf("%02d",month(dates[i])),paste0("rfe",gsub("-","_",dates[i]),".v3.nc"))
+    for (i in 1:length(date_rainfall)){
+      tamsat_file_path<-file.path(path_to_rainfall_folder,year(date_rainfall[i]),sprintf("%02d",month(date_rainfall[i])),paste0("rfe",gsub("-","_",date_rainfall[i]),".v3.nc"))
       rainfall_list_paths<-c(rainfall_list_paths,tamsat_file_path)
     }
   }
 }
+
+
 
 
 # Another working solution to DL the data :
@@ -1331,25 +1345,22 @@ for (i in 1:length(dates)){
 ##############################################################
 
 cat("Processing rainfall data...\n")
-# For interpolation: 
-size_output_grid_resample_rainfall<-250 # in meters. In degrees : 
 
 brick_rainfall<-NULL
-brick_rainfall_positive_precip<-NULL
-
+#brick_rainfall_positive_precip<-NULL
 
 for (i in 1:length(rainfall_list_paths)){
   
   rainfall_rast<-raster(rainfall_list_paths[i])
   
-  if (source_rainfall=="GPM"){
+  if (source_daily_rainfall=="GPM"){
   projection(rainfall_rast)<-CRS("+init=epsg:4326")
   # The raster has to be flipped. Output was validated with the data from 2017-09-20 (see https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/browse/GPM_3IMERGDF.png)
   rainfall_rast <- t(rainfall_rast)
   rainfall_rast <- flip(rainfall_rast,'y')
   rainfall_rast <- flip(rainfall_rast,'x')
   rainfall_rast <- projectRaster(rainfall_rast, crs = CRS(paste0("+init=epsg:",epsg)))
-  } else if (source_rainfall=="TAMSAT") {
+  } else if (source_daily_rainfall=="TAMSAT") {
     
     # Convert output size grid (after interpolation) into degrees
     size_output_grid_resample_rainfall<-fun_convert_meters_to_degrees(size_output_grid_resample_rainfall,mean_latitude)
@@ -1363,13 +1374,14 @@ for (i in 1:length(rainfall_list_paths)){
     
     # Crop to the bbox
     rainfall_rast<-crop(rainfall_rast,bbox_tamsat)
-    
+    # Reproject to UTM
+    rainfall_rast <- projectRaster(rainfall_rast, crs = CRS(paste0("+init=epsg:",epsg)))
   }
   
-  if (resample_rainfall){
+  if (resample_daily_rainfall){
   ### Interpolate 
   r<-rainfall_rast
-  res(r)<-c(size_output_grid_resample_rainfall,size_output_grid_resample_rainfall)
+  res(r)<-c(size_output_grid_resample_daily_rainfall,size_output_grid_resample_daily_rainfall)
   
   ## Using Inverse distance weighting. More info : https://pro.arcgis.com/fr/pro-app/help/analysis/geostatistical-analyst/how-inverse-distance-weighted-interpolation-works.htm
   #grd <- as(r, 'SpatialGrid')
@@ -1384,38 +1396,42 @@ for (i in 1:length(rainfall_list_paths)){
   
   }
   
-  brick_rainfall<-c(brick_rainfall,rainfall_rast)
-  #names(brick_rainfall[[length(brick_rainfall)]])<-gpm_list_names[i]
   
-  rainfall_positive_precip_rast<-rainfall_rast
-  rainfall_positive_precip_rast[rainfall_positive_precip_rast > 0] <- 1
-  rainfall_positive_precip_rast[rainfall_positive_precip_rast <= 0] <- 0
-  brick_rainfall_positive_precip<-c(brick_rainfall_positive_precip,rainfall_positive_precip_rast)
+  brick_rainfall<-c(brick_rainfall,rainfall_rast)
+  names(brick_rainfall[[length(brick_rainfall)]])<-paste0("rainfall_",i-1)
+  
+  #rainfall_positive_precip_rast<-rainfall_rast
+  #rainfall_positive_precip_rast[rainfall_positive_precip_rast > 0] <- 1
+  #rainfall_positive_precip_rast[rainfall_positive_precip_rast <= 0] <- 0
+  #brick_rainfall_positive_precip<-c(brick_rainfall_positive_precip,rainfall_positive_precip_rast)
 }
 
 brick_rainfall<-brick(brick_rainfall)
 
 ## Sum of the precipitations for the n days (TODO on a 3 days moving window ?)
-precip_sum<-sum(v,na.rm = T)
-names(precip_sum)<-"precip_sum"
+#precip_sum<-sum(v,na.rm = T)
+#names(precip_sum)<-"precip_sum"
 ## Precipitation for the date of HLC
-precip_0<-brick_rainfall[[1]]
-names(precip_0)<-"precip_0"
+#precip_0<-brick_rainfall[[1]]
+#names(precip_0)<-"precip_0"
 ## Number of days with precipitations during the n days before the HLC
-precip_ndays<-sum(brick(brick_rainfall_positive_precip),na.rm = T)
-names(precip_ndays)<-"precip_ndays"
+#precip_ndays<-sum(brick(brick_rainfall_positive_precip),na.rm = T)
+#names(precip_ndays)<-"precip_ndays"
 
 #####################################
 ########### B.4.3 Calculate stats within the buffer ###############
 #####################################
 
-# Extract mean of GPM for each raster
-locations_hlc_sp_this_date <- raster::extract(precip_sum, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-locations_hlc_sp_this_date <- raster::extract(precip_0, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
-locations_hlc_sp_this_date <- raster::extract(precip_ndays, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(brick_rainfall))
+# Extract mean of precipitation indices for each raster 
+for (i in 1:length(buffer_sizes_meters)){
+  locations_hlc_sp_this_date <- raster::extract(brick_rainfall, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_rainfall))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(brick_rainfall))],"_",buffer_sizes_meters[i])  # rename column
+}
 
 cat("END integration rainfall data\n")
 }
+
 
 #####################################
 ########### B.5. Night lights ###############
@@ -1443,7 +1459,7 @@ date_end<-seq(date_start, by = "1 month", length = 2)[2]
 time_start<-as.integer(difftime(date_start ,"1970-01-01" , units = c("secs")))*1000
 time_end<-as.integer(difftime(date_end ,"1970-01-01" , units = c("secs")))*1000
 
-url_product<-paste0(url_noaa_nighttime_webservice,"?bbox=",bbox_roi[1,1],",",bbox_roi[2,1],",",bbox_roi[1,2],",",bbox_roi[2,2],"&time=",time_start,",",time_end,"&format=tiff&f=image")
+url_product<-paste0(url_noaa_nighttime_webservice,"?bbox=",bbox_4326[1,1],",",bbox_4326[2,1],",",bbox_4326[1,2],",",bbox_4326[2,2],"&time=",time_start,",",time_end,"&format=tiff&f=image")
 path_to_output_nighttime<-file.path(path_to_nighttime_folder,paste0(gsub("-","_",date_start),".tif"))
 
 url_product_cloudcover<-gsub("Monthly_AvgRadiance","Monthly_CloudFreeCoverage",url_product)
@@ -1470,24 +1486,131 @@ nighttime_cloudcover<-raster(path_to_output_nighttime_cloudcover)
 nighttime_cloudcover[nighttime_cloudcover==0]<-NA
 nighttime_rast <- mask(nighttime_rast, nighttime_cloudcover)
 
-# Extract mean of DNB radiance. However change the buffer size (500 m) ? 
+# Extract mean of DNB radiance.
 names(nighttime_rast)<-"nightligth_mean"
 
 #####################################
 ########### B.5.3 Calculate stats within the buffer ###############
 #####################################
 
-locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(nighttime_rast))
+# Extract mean of nigthlight indices for each buffer 
+# Note that when both the point data and the raster data are in WGS84, the buffer argument is in meters (and not in degrees)
+for (i in 1:length(buffer_sizes_meters)){
+  locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_this_date, buffer=buffer_sizes_meters[i], fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+  names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(nighttime_rast))]<-paste0(names(locations_hlc_sp_this_date)[which(names(locations_hlc_sp_this_date) %in% names(nighttime_rast))],"_",buffer_sizes_meters[i])  # rename column
+}
+# Also extract maximum on a close buffer (400 m)
+names(nighttime_rast)<-"nightligth_max"
+locations_hlc_sp_this_date <- raster::extract(nighttime_rast, locations_hlc_sp_this_date, buffer=400, fun=max, na.rm=TRUE, sp=TRUE,small=TRUE) 
+
 
 cat("END integration night lights data\n")
 }
 
+
 #####################################
-########### B.6. Wind (ERA) ###############
+########### B.6. Half-hourly Rainfall ###############
+#####################################
+
+if(use_half_hourly_rainfall){
+cat("  B.6. Integrating half-hourly rainfall data ...\n")
+  
+##############################################################
+#### B.6.1 - Download the data ####
+##############################################################
+  
+fun_build_gpm_hhourly_opendap_url<-function(date_catch){
+    
+  year<-format(date_catch,'%Y')
+  month<-format(date_catch,'%m')
+  day<-sprintf("%03d",lubridate::yday(date_catch))
+  hour_start<-paste0(sprintf("%02d",hour(date_catch)),sprintf("%02d",minute(date_catch)),sprintf("%02d",second(date_catch)))
+  hour_end<-date_catch+minutes(29)+seconds(59)
+  hour_end<-paste0(sprintf("%02d",hour(hour_end)),sprintf("%02d",minute(hour_end)),sprintf("%02d",second(hour_end)))
+  number_minutes_from_start_day<-sprintf("%04d",difftime(date_catch,as.POSIXlt(paste0(as.Date(date_catch)," 00:00:00")),units="mins"))
+  product_name<-paste0("3B-HHR.MS.MRG.3IMERG.",gsub("-","",as.Date(date_catch)),"-S",hour_start,"-E",hour_end,".",number_minutes_from_start_day,".V06A.HDF5.nc4")
+    
+  # We use the precipitationCal variable, as explained in the technical doc (https://pps.gsfc.nasa.gov/Documents/IMERG_doc_190313.pdf , p.39) : Note  well  that  HQprecipitation only includes  microwave  data  (hence  “HQ”),  meaning  it  has significant gaps.  precipitationCal is the complete estimate that most users will want to access
+  url_product<-paste0(url_gpm_hhourly_opendap,"/",year,"/",day,"/",product_name,"?precipitationCal[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
+    
+  return(url_product)
+}
+  
+## Get the half-hourly GPM data : 
+# Download the data
+times_gpm_hhourly<-seq(from=as.POSIXlt(paste0(this_date_hlc," ",hh_rainfall_hour_begin,":00:00")),to=as.POSIXlt(as.POSIXlt(paste0(this_date_hlc+1," ",hh_rainfall_hour_end,":00:00"))),by="30 min")
+  
+rainfall_hhourly_list_paths<-NULL
+  
+for (i in 1:length(times_gpm_hhourly)){
+  cat(paste0("Downloading GPM half-hourly data for the ROI and for half hour ",times_gpm_hhourly[i],"\n"))
+  # build the url of the dataset
+  url_opendap<-fun_build_gpm_hhourly_opendap_url(times_gpm_hhourly[i])
+  # Download the data
+  hh_gpm_name<-as.character(gsub(":","",times_gpm_hhourly[i]))
+  hh_gpm_name<-gsub("-","",hh_gpm_name)
+  hh_gpm_name<-gsub(" ","_",hh_gpm_name)
+  path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_hh",hh_gpm_name,".nc4"))
+  rainfall_hhourly_list_paths<-c(rainfall_hhourly_list_paths,path_to_output_gpm_data)
+  if (!(file.exists(path_to_output_gpm_data))){
+    httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
+  } else {
+    cat(paste0("Data is already existing for date ",times_gpm_hhourly[i],"\n"))
+  }
+}
+  
+  
+##############################################################
+#### B.6.2 - Prepare the data ####
+##############################################################
+  
+cat("Processing half hourly rainfall data...\n")
+
+brick_rainfall_hhourly<-NULL
+
+for (i in 1:length(rainfall_hhourly_list_paths)){
+  
+  rainfall_rast<-raster(rainfall_hhourly_list_paths[i])
+  
+  projection(rainfall_rast)<-CRS("+init=epsg:4326")
+  # The raster has to be flipped. Output was validated with the data from 2017-09-20 (see https://docserver.gesdisc.eosdis.nasa.gov/public/project/GPM/browse/GPM_3IMERGDF.png)
+  rainfall_rast <- t(rainfall_rast)
+  rainfall_rast <- flip(rainfall_rast,'y')
+  rainfall_rast <- flip(rainfall_rast,'x')
+  rainfall_rast <- projectRaster(rainfall_rast, crs = CRS(paste0("+init=epsg:",epsg)))
+
+  if (resample_hhourly_rainfall){
+  ### Interpolate using resample (bilinear resampling, cf. http://desktop.arcgis.com/fr/arcmap/latest/extensions/spatial-analyst/performing-analysis/cell-size-and-resampling-in-analysis.htm)
+  r<-rainfall_rast
+  res(r)<-c(size_output_grid_resample_hhourly_rainfall,size_output_grid_resample_hhourly_rainfall)
+  rainfall_rast<-resample(rainfall_rast,r,method='bilinear')
+  }
+  
+  brick_rainfall_hhourly<-c(brick_rainfall_hhourly,rainfall_rast)
+}
+
+brick_rainfall_hhourly<-brick(brick_rainfall_hhourly)
+sum_rainfall_hhourly<-sum(brick_rainfall_hhourly)
+names(sum_rainfall_hhourly)<-"rainfall_nighthlc"
+
+#####################################
+########### B.4.3 Calculate stats within the buffer ###############
+#####################################
+
+locations_hlc_sp_this_date <- spTransform(locations_hlc_sp_this_date,proj4string(sum_rainfall_hhourly))
+# Extract sum of half hourly precipitation at the location of the HLC
+locations_hlc_sp_this_date <- raster::extract(sum_rainfall_hhourly, locations_hlc_sp_this_date, sp=TRUE) 
+
+cat("END integration half-hourly rainfall data\n")
+}
+
+#####################################
+########### B.7. Wind (ERA) ###############
 #####################################
 
 if(use_wind){
-  cat("  B.6. Integrating wind data ...\n")
+  cat("  B.7. Integrating wind data ...\n")
   
 # Check : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/
 
@@ -1496,7 +1619,7 @@ if(use_wind){
 # Description of the wind data: https://apps.ecmwf.int/codes/grib/param-db?id=165 and https://apps.ecmwf.int/codes/grib/param-db?id=166
 
 ##############################################################
-#### B.6.1 - Download the data ####
+#### B.7.1 - Download the data ####
 ##############################################################
 
 bbox_4326<-bbox(spTransform(dates_locations_hlc_sp,CRS("+init=epsg:4326")))
@@ -1507,7 +1630,6 @@ bbox_4326[,2]=bbox_4326[,2]+1
 path_to_output_erawind_data_this_date<-file.path(path_to_erawind_folder,paste0(gsub("-","_",this_date_hlc),".nc"))
 path_to_output_erawind_data_this_date_plus_one<-file.path(path_to_erawind_folder,paste0(gsub("-","_",this_date_hlc+1),".nc"))
 
-
 #we create the query for the date of catch, hours 18h to 23h
 query_this_date_hlc <- r_to_py(list(
   variable= c("10m_u_component_of_wind","10m_v_component_of_wind"),
@@ -1515,7 +1637,7 @@ query_this_date_hlc <- r_to_py(list(
   year= format(this_date_hlc, "%Y"),
   month= format(this_date_hlc, "%m"), #formato: "01","01", etc.
   day= format(this_date_hlc, "%d"), #stringr::str_pad(1:31,2,"left","0"),   
-  time= stringr::str_c(18:23,"00",sep=":")%>%str_pad(5,"left","0"),
+  time= stringr::str_c(wind_hour_begin:23,"00",sep=":")%>%str_pad(5,"left","0"),
   format= "netcdf",
   area = paste0(bbox_4326[2,2],"/",bbox_4326[1,1],"/",bbox_4326[2,1],"/",bbox_4326[1,2]) # North, West, South, East
 ))
@@ -1527,7 +1649,7 @@ query_this_date_hlc_plus_one <- r_to_py(list(
   year= format(this_date_hlc+1, "%Y"),
   month= format(this_date_hlc+1, "%m"), 
   day= format(this_date_hlc+1, "%d"), 
-  time= stringr::str_c(00:08,"00",sep=":")%>%str_pad(5,"left","0"),
+  time= stringr::str_c(00:wind_hour_end,"00",sep=":")%>%str_pad(5,"left","0"),
   format= "netcdf",
   area = paste0(bbox_4326[2,2],"/",bbox_4326[1,1],"/",bbox_4326[2,1],"/",bbox_4326[1,2])
 ))
@@ -1542,14 +1664,13 @@ server$retrieve("reanalysis-era5-single-levels",
                 path_to_output_erawind_data_this_date_plus_one)
 
 ##############################################################
-#### B.6.2 - Prepare the data ####
+#### B.7.2 - Prepare the data ####
 ##############################################################
 
 # open path_to_output_erawind_data_this_date and preprocess each component (open each layer as raster (ie each hour), reproject to right epsg, resample, crop to ROI extent)
 # open path_to_output_erawind_data_this_date and preprocess (open each layer as raster (ie each hour), reproject to right epsg, resample, crop to ROI extent)
 # make a raster brick out of all the pre-processed rasters of path_to_output_erawind_data_this_date
 # make a raster brick out of all the pre-processed rasters of path_to_output_erawind_data_this_date
-
 
 brick_u10_this_date<-fun_preprocess_era_product(path_to_output_erawind_data_this_date,"u10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
 brick_u10_this_date_plus_one<-fun_preprocess_era_product(path_to_output_erawind_data_this_date_plus_one,"u10",roi_sp_utm,epsg,resample_wind,size_output_grid_resample_wind)
@@ -1565,27 +1686,27 @@ wind_v10_mean<-mean(brick_v10,na.rm=TRUE)
 
 # Wind speed is calculated by sqrt(u^2+v^2)
 wind_speed<-sqrt(wind_u10_mean^2+wind_v10_mean^2)
-names(wind_speed)="wind_speed"
+names(wind_speed)="wind_speed_nighthlc"
 
 #####################################
-########### B.6.3 Calculate stats within the buffer ###############
+########### B.7.3 Calculate stats within the buffer ###############
 #####################################
 
-# Extract wind speed
-locations_hlc_sp_this_date <- raster::extract(wind_speed, locations_hlc_sp_this_date, buffer=buffer_size,fun=mean, na.rm=TRUE, sp=TRUE,small=TRUE) 
+# Extract wind speed at the location of the HLC
+locations_hlc_sp_this_date <- raster::extract(wind_speed, locations_hlc_sp_this_date, sp=TRUE,small=TRUE) 
 
 cat("END integration wind data\n")
 }
 
 #################################################################
-########### B.7. Ephemeris of the Moon ###############
+########### B.8. Ephemeris of the Moon ###############
 #################################################################
 
 if(use_moon){
-  cat("  B.7. Integrating moon ephemeris data ...\n")
+  cat("  B.8. Integrating moon ephemeris data ...\n")
   
 ##############################################################
-#### B.7.1 - Download the data ####
+#### B.8.1 - Download the data ####
 ##############################################################
 
 ## More info on IMCCE web services at http://vo.imcce.fr/webservices/miriade/?ephemcc
@@ -1606,7 +1727,7 @@ if (!(file.exists(path_to_output_imcce_data))){
 }
 
 ##############################################################
-#### B.7.2 - Prepare the data ####
+#### B.8.2 - Prepare the data ####
 ##############################################################
 
 # Open the data
@@ -1614,10 +1735,10 @@ moon_magnitude<-read.csv(path_to_output_imcce_data,skip=10)
 colnames(moon_magnitude)<-gsub("\\.","_",colnames(moon_magnitude))
 
 #####################################
-########### B.7.3 Calculate stats within the buffer ###############
+########### B.8.3 Calculate stats ###############
 #####################################
 
-locations_hlc_sp_this_date$moon_vmag <- moon_magnitude$V_Mag
+locations_hlc_sp_this_date$moon_vmag_nighthlc <- moon_magnitude$V_Mag
 
 cat("END integration moon ephemeris data\n")
 }
