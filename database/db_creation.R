@@ -145,6 +145,12 @@ raw_dates_hlc<-rbind(raw_bf_dates_hlc,raw_civ_dates_hlc)
 raw_dates_hlc <- cbind(fid = 1:nrow(raw_dates_hlc), raw_dates_hlc)
 dbWriteTable(react_gpkg,"raw_dates_hlc",raw_dates_hlc)
 
+# hlc_dates_loc_times
+source("/home/ptaconet/r_react/database/hlc_dates_loc_times.R")
+hlc_dates_loc_times_sf<-st_as_sf(hlc_dates_loc_times,coords =  c("longitude", "latitude"), crs = 4326 )
+hlc_dates_loc_times_sf<-cbind(hlc_dates_loc_times_sf,st_coordinates(hlc_dates_loc_times_sf))
+st_write(hlc_dates_loc_times_sf, path_to_gpkg_database, "hlc_dates_loc_times", update = TRUE)
+
 # LU/LC training and validation parcels (raw and segmented)
 ground_truth_data_civ_raw<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_vector_32630.gpkg")
 ground_truth_data_civ_raw <- cbind(pk = 1:nrow(ground_truth_data_civ_raw), ground_truth_data_civ_raw)
@@ -164,9 +170,6 @@ gdal_translate(path_to_pedology_civ,path_to_gpkg_database,ot="Float32",of="GPKG"
 gdal_translate(path_to_pedology_bf,path_to_gpkg_database,ot="Float32",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_bf"))
 
 
-
-# hlc_locations_dates
-source("/home/ptaconet/r_react/database/hlc_locations_dates.R")
 
 
 
