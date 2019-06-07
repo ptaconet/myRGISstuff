@@ -43,16 +43,13 @@ if(!require(rgdal)){
 if(!require(gdalUtils)){
   install.packages("gdalUtils")
 }
-if(!require(raster)){
-  install.packages("raster")
-}
+
 
 require(sf)
 require(raster)
 require(rjson)
 require(rgdal)
 require(gdalUtils)
-require(raster)
 
 # Source useful functions
 source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/get_bingmaps_images/download_and_georeference_bingmaps_data.R")
@@ -85,7 +82,7 @@ grid_10km=st_make_grid(poly,what="polygons",cellsize = cell_size)
 st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"raster_10km.gpkg"))
 
 # Loop on each 10km square tile
-for (i in 2:length(grid_10km)){
+for (i in 1:length(grid_10km)){
 
   
 cat(paste0("Creating 10 square kilometers grid n° ",i, " over ",length(grid_10km)))
@@ -123,9 +120,12 @@ mosaic_tif_images(all_my_rasts,paste0(destFolder,"/",i,"_10km.tif"))
 
 ## Convert the tif created to a raster in a OGC Geopackage and build pyramids at various zoom levels .
 cat("Converting the tif to a geopackage file")
-system(paste0("gdal_translate -ot Byte -of GPKG ",destFolder,"/",i,"_10km.tif ",destFolder,"/",i,"_10km.gpkg -co APPEND_SUBDATASET=YES -co RASTER_TABLE=",i,"_10km"))
+setwd(destFolder)
+#system(paste0("gdal_translate -ot Byte -of GPKG ",destFolder,"/",i,"_10km.tif ",destFolder,"/",i,"_10km.gpkg -co APPEND_SUBDATASET=YES -co RASTER_TABLE=",i,"_10km"))
+gdalUtils::gdal_translate(src_dataset=paste0(i,"_10km.tif"),dst_dataset=paste0(i,"_10km.gpkg"),ot="Byte",of="GPKG",co=c("APPEND_SUBDATASET=YES",paste0("RASTER_TABLE=",i,"_10km")))
 cat("Building pyramids for quick rendering on GIS")
-system(paste0("gdaladdo --config OGR_SQLITE_SYNCHRONOUS OFF -r AVERAGE ",destFolder,"/",i,"_10km.gpkg 2 4 8 16 32 64 128 256"))
+#system(paste0("gdaladdo --config OGR_SQLITE_SYNCHRONOUS OFF -r AVERAGE ",destFolder,"/",i,"_10km.gpkg 2 4 8 16 32 64 128 256"))
+gdalUtils::gdaladdo(filename=paste0(i,"_10km.gpkg"),levels=c(2,4,8,16,32,64,128,256),r="average")
 
 }
 
