@@ -13,8 +13,9 @@
 #kml_path="/home/ptaconet/Téléchargements/kml_bobo.kml"
 lat_min<-11.06246
 lon_min<--4.384058
-lat_max<-11.237
-lon_max<--4.249606
+lat_max<-11.07246
+lon_max<--4.374058
+area_name="bobo"
 
 #apiKey = scan("/home/ptaconet/Documents/react/r_bingmaps/bingAPIkey.txt",what="")
 apiKey="xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx"
@@ -55,8 +56,11 @@ require(gdalUtils)
 source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/get_bingmaps_images/download_and_georeference_bingmaps_data.R")
 source("https://raw.githubusercontent.com/ptaconet/r_react/master/outdated_scripts/mosaic_tif_images.R")
 
+setwd(destFolder)
+
+
 ## Get UTM WGS84 Zone number of the ROI. from https://stackoverflow.com/questions/9186496/determining-utm-zone-to-convert-from-longitude-latitude
-cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
+#cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
 utm_zone_number<-(floor((lon_min + 180)/6) %% 60) + 1
 if(lat_max>0){ # if latitudes are North
   epsg_utm<-as.numeric(paste0("326",utm_zone_number))
@@ -76,27 +80,31 @@ poly <- st_sf(st_sfc(st_polygon(list(as.matrix(df)))), crs = 4326)
 poly <- st_transform(poly,crs=epsg_utm)
 
 # Make grid over the bounding box. We want 10 km square grids, so as to be able to use them on the tablet. 
-grid_10km=st_make_grid(poly,what="polygons",cellsize = cell_size)
+#grid_10km=st_make_grid(poly,what="polygons",cellsize = cell_size)
 
 # We convert the grid to geopackage and we save it
-st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"raster_10km.gpkg"))
+#st_write(st_transform(grid_10km,crs=4326),file.path(destFolder,"raster_10km.gpkg"))
 
 # Loop on each 10km square tile
-for (i in 1:length(grid_10km)){
+#for (i in 1:length(grid_10km)){
 
   
-cat(paste0("Creating 10 square kilometers grid n° ",i, " over ",length(grid_10km)))
+#cat(paste0("Creating 10 square kilometers grid n° ",i, " over ",length(grid_10km)))
   
 # We can download 1500 * 1500 pixels image from bing maps servers. We know that at zoom 19, 1 pixel=0.30m, so 1500 px = 450m. So within each 10km grid we make 400m grids (to be sure that all the area is encompassed)
-grid_400m=st_make_grid(grid_10km[i],what="centers",cellsize = 400)
 
+#grid_400m=st_make_grid(grid_10km[i],what="centers",cellsize = 400)
+grid_400m=st_make_grid(poly,what="centers",cellsize = 400)
+  
 grid_400m=st_transform(grid_400m,crs=4326)
 
-dir.create(file.path(destFolder, i))
+#dir.create(file.path(destFolder, i))
+dir.create("small_tif")
 # Download all the tiles from bing maps servers and convert them as tif
 for (j in 1:length(grid_400m)){
   cat(paste0("downloading the data n° ",j, " over ",length(grid_400m)))
-  fileName=paste0(i,"_10km_",j)
+  #fileName=paste0(i,"_10km_",j)
+  fileName=j
   map_this_tile<-download_and_georeference_bingmaps_data(apiKey=apiKey,
                                                     center_x=st_coordinates(grid_400m[j])[1,1],
                                                     center_y=st_coordinates(grid_400m[j])[1,2],
@@ -104,29 +112,32 @@ for (j in 1:length(grid_400m)){
                                                     mapsize_height=mapsize_width,
                                                     imagerySet=imagerySet,
                                                     zoomLevel=zoomLevel,
-                                                    destFolder=destFolder,
-                                                    fileName=paste0(i,"_10km_",j)
+                                                    destFolder="small_tif",
+                                                    #fileName=paste0(i,"_10km_",j)
+                                                    fileName=j
   )
-  file.copy(paste0(destFolder,"/",fileName,'.tif'),paste0(destFolder,"/",i,"/",fileName,'.tif'))
-  file.remove(paste0(destFolder,"/",fileName,'.tif'))
+  #file.copy(paste0(destFolder,"/",fileName,'.tif'),paste0(destFolder,"/",i,"/",fileName,'.tif'))
+  #file.remove(paste0(destFolder,"/",fileName,'.tif'))
 }
 
 # make a big tif out of all the small tifs
-cat("Creating the 10km x 10km tif")
-all_my_rasts <- list.files(path=file.path(destFolder,i), pattern =paste0(i,"_10km"), full.names=TRUE)
+#cat("Creating the 10km x 10km tif")
+#all_my_rasts <- list.files(path=file.path(destFolder,i), pattern =paste0(i,"_10km"), full.names=TRUE)
+all_my_rasts <- list.files(path="small_tif", full.names=TRUE)
 all_my_rasts=as.vector(all_my_rasts)
 
-mosaic_tif_images(all_my_rasts,paste0(destFolder,"/",i,"_10km.tif"))
+#mosaic_tif_images(all_my_rasts,paste0(destFolder,"/",i,"_10km.tif"))
+cat("Mosaicing...")
+mosaic_tif_images(all_my_rasts,"bingmaps_area.tif")
 
 ## Convert the tif created to a raster in a OGC Geopackage and build pyramids at various zoom levels .
 cat("Converting the tif to a geopackage file")
-setwd(destFolder)
-#system(paste0("gdal_translate -ot Byte -of GPKG ",destFolder,"/",i,"_10km.tif ",destFolder,"/",i,"_10km.gpkg -co APPEND_SUBDATASET=YES -co RASTER_TABLE=",i,"_10km"))
-gdalUtils::gdal_translate(src_dataset=paste0(i,"_10km.tif"),dst_dataset=paste0(i,"_10km.gpkg"),ot="Byte",of="GPKG",co=c("APPEND_SUBDATASET=YES",paste0("RASTER_TABLE=",i,"_10km")))
+#gdalUtils::gdal_translate(src_dataset=paste0(i,"_10km.tif"),dst_dataset=paste0(i,"_10km.gpkg"),ot="Byte",of="GPKG",co=c("APPEND_SUBDATASET=YES",paste0("RASTER_TABLE=",i,"_10km")))
+gdalUtils::gdal_translate(src_dataset="bingmaps_area.tif",dst_dataset=paste0(area_name,".gpkg"),ot="Byte",of="GPKG",co=c("APPEND_SUBDATASET=YES"))
 cat("Building pyramids for quick rendering on GIS")
-#system(paste0("gdaladdo --config OGR_SQLITE_SYNCHRONOUS OFF -r AVERAGE ",destFolder,"/",i,"_10km.gpkg 2 4 8 16 32 64 128 256"))
-gdalUtils::gdaladdo(filename=paste0(i,"_10km.gpkg"),levels=c(2,4,8,16,32,64,128,256),r="average")
+#gdalUtils::gdaladdo(filename=paste0(i,"_10km.gpkg"),levels=c(2,4,8,16,32,64,128,256),r="average")
+gdalUtils::gdaladdo(filename=paste0(area_name,".gpkg"),levels=c(2,4,8,16,32,64,128,256),r="average")
 
-}
+#}
 
 
