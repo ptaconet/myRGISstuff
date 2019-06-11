@@ -13,8 +13,6 @@
 # Extract the data (i.e. compute zonal statistics) on a buffer around the villages
 
 
-
-
 #### Start Workflow
 ########################################################################################################################
 ############ Set Input parameters for the workflow ############
@@ -23,7 +21,7 @@
 rm(list = ls())
 
 ## Global parameters
-path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
+path_to_processing_folder<-"/home/ptaconet/Documents/react/data_BF"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
 path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file containing the credential to the NASA servers (EarthData)
 
@@ -31,9 +29,8 @@ path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file co
 path_to_csv_hlc_dates_loc<-"df_hlc.csv"
 
 ## Covariates to retrieve. For each covariate that is used (use_xxx<-TRUE), the related parameters must be set
-# DEM and DEM-derivatives 
+# DEM and DEM-derivatives. source: SRTM 30 m (https://dwtkns.com/srtm30m/)
 use_dem<-TRUE
-srtm_tiles<-c("N08W006","N09W006")  # CIV : STRM tile numbers can be retrieved here : https://dwtkns.com/srtm30m/    c("N08W006","N09W006") ; BF : c("N10W004","N11W004")  ## TODO NEXT DEV : automatize with ROI
 threshold_accumulation_raster<-800  # CIV: 800 ; BF: 1000    ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
 # Population and settlements (source: own) #TODO next dev: implement with HRSL (facebook data)
 use_settlements_pop<-TRUE
@@ -46,7 +43,7 @@ use_lu_lc<-TRUE
 path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
 # Pedology (source: own)
 use_pedology<-TRUE
-path_to_pedology_dataset<-"pedology/pedo_final_32630.tif"
+path_to_pedology_dataset<-"pedology/pedology.tif"
 hydromorphic_classes_pixels<-c(11,14,5,2,13) # pixels values whose classes are considered hydromorphic.   for CIV: c(11,14,5,2,13)  for BF: c(2,3,8,9,10)
 # Road network (source: own)  #TODO next dev: automatic implementation with OpenStreetMap ? 
 use_roads<-TRUE
@@ -86,6 +83,12 @@ size_output_grid_resample_wind<-250 # if resample_wind is TRUE : size of output 
 ## Buffer sizes, within which the raster statistics will be computed (radius in meters)
 buffer_sizes_meters=c(500,1000,2000) 
 
+####################################################################################################
+########## SPECIFIC TO OUR CASE : Create the various files/datasets to use as input of this script from the project database #########
+codepays<-"BF"
+source("/home/ptaconet/r_react/create_input_datasets_script_model.R")
+########## END Specific to our case ##########
+####################################################################################################
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -99,7 +102,6 @@ library(gdalUtils)
 library(rgdal)
 require(rgeos)
 require(httr)
-require(RSQLite)
 require(dplyr)
 require(ncdf4)
 require(reticulate)
@@ -110,6 +112,7 @@ require(landscapemetrics)
 require(landscapetools)
 require(spatstat)
 require(maptools)
+require(geojsonsf)
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -267,6 +270,14 @@ if(bbox(roi_sp_4326)[2,1]>0){ # if latitudes are North
   epsg<-as.numeric(paste0("325",utm_zone_number))
 }
 
+## Get SRTM tiles for the ROI
+if (!(file.exists("srtm30m_bounding_boxes.json"))){
+  download.file("http://dwtkns.com/srtm30m/srtm30m_bounding_boxes.json","srtm30m_bounding_boxes.json")
+}
+srtm_bboxes <- geojsonsf::geojson_sf("srtm30m_bounding_boxes.json")
+srtm_tiles<-sf::st_intersection(srtm_bboxes,st_as_sf(roi_sp_4326))$dataFile
+srtm_tiles<-substr(srtm_tiles,1,7)
+
 ## Get MODIS tile number(s) for the ROI
 if(!file.exists(file.path(path_to_processing_folder,"modis_sin.kmz"))){
   download.file("https://modis.ornl.gov/files/modis_sin.kmz",destfile = file.path(path_to_processing_folder,"modis_sin.kmz"))
@@ -416,8 +427,7 @@ if (!file.exists(streams_network_path)){
   # With v.split we split the stream network into pieces of 20 meters. This will be used then to measure the mean length between the HLC point and the streams within the buffer
   execGRASS("v.split", flags=c("overwrite","verbose"), parameters=list(input="acc_thin_vect", output="acc_thin_vect_split", length=20, units="map"))
   # the step v.split does not give the appropriate results when executed in R, although it does not send back any error... It is weird because it works in QGIS (through GRASS plugin). For now we need to do it by hand in QGIS ...
-  execGRASS("v.out.ogr", flags=c("m","overwrite"), parameters=list(input="acc_thin_vect", type="line", output=streams_network_path))
-  #execGRASS("v.out.ogr", flags=c("m","overwrite"), parameters=list(input="acc_thin_vect_split", type="line", output=streams_network_path))
+  execGRASS("v.out.ogr", flags=c("m","overwrite"), parameters=list(input="acc_thin_vect_split", type="line", output=streams_network_path))
   
 }
 
@@ -444,8 +454,7 @@ for (i in 1:length(buffer_sizes_meters)){
 ## Calculate the stats related to hydrographic network (stream network): mean and min distance to stream, total length of stream
 
 dates_locations_hlc_sf<-st_as_sf(dates_locations_hlc_sp)
-
-# Really not optimized with these loops... takes about 7 min for 10000 HLC points for each buffer
+# Really not optimized with these loops... but still ok because we do not have too many rows
 for (i in 1:length(buffer_sizes_meters)){
 
   # Initialize columns
@@ -472,7 +481,6 @@ for (i in 1:length(buffer_sizes_meters)){
   names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))],"_",buffer_sizes_meters[i])
   
 }
-
 cat("END integration DEM and DEM-derivatives data")
 }
 
@@ -549,6 +557,8 @@ for (i in 1:length(villages)){
   # surface built in each village
   df_villages_loc_pop_sp_th_village<-df_villages_loc_pop_sp[which(df_villages_loc_pop_sp$village==villages[i]),]
   df_villages_loc_pop_sp_th_village<-spTransform(df_villages_loc_pop_sp_th_village,CRS(paste0("+init=epsg:",epsg)))
+  
+  if (!is.null(raster::intersect(extent(inertia_texture), df_villages_loc_pop_sp_th_village))){
   inertia_this_village<-raster::crop(inertia_texture,df_villages_loc_pop_sp_th_village)
   inertia_this_village[inertia_this_village<=threshold_inertia_built_areas]<-NA
   inertia_this_village[inertia_this_village>threshold_inertia_built_areas]=1
@@ -560,8 +570,11 @@ for (i in 1:length(villages)){
   dates_locations_hlc_sp_th_village<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$village==villages[i]),]
   dates_locations_hlc_sp_th_village<-raster::extract(inertia_this_village, dates_locations_hlc_sp_th_village, buffer=buffer_built_surf_density, fun=sum, na.rm=TRUE, df=TRUE,small=TRUE) 
   dates_locations_hlc_sp$built_surf_density[which(dates_locations_hlc_sp$village==villages[i])] <- dates_locations_hlc_sp_th_village[,2]
-  
-  print(i)
+  } else {
+    df_villages_loc_pop_sp$built_surf[which(df_villages_loc_pop_sp$village==villages[i])]<-NA
+    dates_locations_hlc_sp$built_surf_density[which(dates_locations_hlc_sp$village==villages[i])] <- NA
+  }
+  #print(i)
 }
 
 # density of surface built around each catch point
@@ -676,14 +689,14 @@ cat("END integration static data \n")
 cat("B. Integrating dynamic data ... \n")
 
 ## Get all dates
-all_dates_hlc<-unique(df_dates_locations_hlc$datecapture)
+all_dates_hlc<-unique(df_dates_locations_hlc$date_capture)
 
 ## For tests: retrieve all the lines for the first date
 
 
 
-i=100
-locations_hlc_sp_this_date<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$datecapture==all_dates_hlc[i]),]
+i=10
+locations_hlc_sp_this_date<-dates_locations_hlc_sp[which(dates_locations_hlc_sp$date_capture==all_dates_hlc[i]),]
 this_date_hlc<-as.Date(all_dates_hlc[i])
 
 
@@ -757,10 +770,10 @@ if (!(file.exists(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_YDim_
   httr::GET(paste0(url_opendap_modis_evapo_terra,".ncml.ascii?YDim"),write_disk(file.path(path_to_modisevapo_folder,"opendap_modis_evapo_YDim_index.txt")))
 }   
 if (!(file.exists(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt")))){
-  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt")))
+  httr::GET(paste0(url_gpm_daily_opendap,"/2016/02/3B-DAY.MS.MRG.3IMERG.20160201-S000000-E235959.V06.nc4.ascii?lon"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lon_index.txt")))
 }   
 if (!(file.exists(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt")))){
-  httr::GET(paste0(url_gpm_opendap,"/2018/02/3B-DAY.MS.MRG.3IMERG.20180201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt")))
+  httr::GET(paste0(url_gpm_daily_opendap,"/2016/02/3B-DAY.MS.MRG.3IMERG.20160201-S000000-E235959.V06.nc4.ascii?lat"),write_disk(file.path(path_to_rainfall_folder,"opendap_gpm_lat_index.txt")))
 }
 
 ## Get the spatial indexes as vectors
@@ -1263,7 +1276,7 @@ if(use_daily_rainfall){
 #### B.4.1 - Download the data ####
 ##############################################################
 
-date_rainfall<-seq(this_date_hlc,this_date_hlc-lag_max_days_rainfall,-1)
+dates_rainfall<-seq(this_date_hlc,this_date_hlc-lag_max_days_rainfall,-1)
 
 # Function to build the OpenDap URL to dowload GPM 1km data. input parameters : date
 
@@ -1285,22 +1298,22 @@ rainfall_list_paths<-NULL
 #gpm_list_names<-NULL
 
 if (source_daily_rainfall=="GPM"){
-for (i in 1:length(dates)){
-    cat(paste0("Downloading GPM data for the ROI and for date ",date_rainfall[i],"\n"))
+for (i in 1:length(dates_rainfall)){
+    cat(paste0("Downloading GPM data for the ROI and for date ",dates_rainfall[i],"\n"))
     # build the url of the dataset
-    url_opendap<-fun_build_gpm_daily_opendap_url(date_rainfall[i])
+    url_opendap<-fun_build_gpm_daily_opendap_url(dates_rainfall[i])
     # Download the data
-    path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_d_",gsub("-","",date_rainfall[i]),".nc4"))
+    path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_d_",gsub("-","",dates_rainfall[i]),".nc4"))
     rainfall_list_paths<-c(rainfall_list_paths,path_to_output_gpm_data)
-    #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(date_rainfall[i] ,this_date_hlc , units = c("days"))))))
+    #gpm_list_names<-c(gpm_list_names,paste0("gpm_",as.character(abs(difftime(dates_rainfall[i] ,this_date_hlc , units = c("days"))))))
     if (!(file.exists(path_to_output_gpm_data))){
       httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
     } else {
-      cat(paste0("Data is already existing for date ",date_rainfall[i],"\n"))
+      cat(paste0("Data is already existing for date ",dates_rainfall[i],"\n"))
     }
   }
 } else if (source_daily_rainfall=="TAMSAT"){
-  years<-unique(year(date_rainfall))
+  years<-unique(year(dates_rainfall))
   # Donwload the data (whole year, because faster than 40 days separately)
   for (i in 1:length(years)){
     cat(paste0("Downloading TAMSAT data for the ROI and for year ",years[i],"\n"))
@@ -1313,8 +1326,8 @@ for (i in 1:length(dates)){
       cat(paste0("Data is already existing for date ",years[i],"\n"))
     }
     # Retrieve paths for the dates of interest
-    for (i in 1:length(date_rainfall)){
-      tamsat_file_path<-file.path(path_to_rainfall_folder,year(date_rainfall[i]),sprintf("%02d",month(date_rainfall[i])),paste0("rfe",gsub("-","_",date_rainfall[i]),".v3.nc"))
+    for (i in 1:length(dates_rainfall)){
+      tamsat_file_path<-file.path(path_to_rainfall_folder,year(dates_rainfall[i]),sprintf("%02d",month(dates_rainfall[i])),paste0("rfe",gsub("-","_",dates_rainfall[i]),".v3.nc"))
       rainfall_list_paths<-c(rainfall_list_paths,tamsat_file_path)
     }
   }
@@ -1529,7 +1542,7 @@ fun_build_gpm_hhourly_opendap_url<-function(date_catch){
   hour_end<-date_catch+minutes(29)+seconds(59)
   hour_end<-paste0(sprintf("%02d",hour(hour_end)),sprintf("%02d",minute(hour_end)),sprintf("%02d",second(hour_end)))
   number_minutes_from_start_day<-sprintf("%04d",difftime(date_catch,as.POSIXlt(paste0(as.Date(date_catch)," 00:00:00")),units="mins"))
-  product_name<-paste0("3B-HHR.MS.MRG.3IMERG.",gsub("-","",as.Date(date_catch)),"-S",hour_start,"-E",hour_end,".",number_minutes_from_start_day,".V06A.HDF5.nc4")
+  product_name<-paste0("3B-HHR.MS.MRG.3IMERG.",gsub("-","",as.Date(date_catch)),"-S",hour_start,"-E",hour_end,".",number_minutes_from_start_day,".V06B.HDF5.nc4")
     
   # We use the precipitationCal variable, as explained in the technical doc (https://pps.gsfc.nasa.gov/Documents/IMERG_doc_190313.pdf , p.39) : Note  well  that  HQprecipitation only includes  microwave  data  (hence  “HQ”),  meaning  it  has significant gaps.  precipitationCal is the complete estimate that most users will want to access
   url_product<-paste0(url_gpm_hhourly_opendap,"/",year,"/",day,"/",product_name,"?precipitationCal[0:0][",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"][",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"],lon[",index_opendap_gpm_lon_min,":",index_opendap_gpm_lon_max,"],lat[",index_opendap_gpm_lat_min,":",index_opendap_gpm_lat_max,"]")
@@ -1549,9 +1562,12 @@ for (i in 1:length(times_gpm_hhourly)){
   url_opendap<-fun_build_gpm_hhourly_opendap_url(times_gpm_hhourly[i])
   # Download the data
   hh_gpm_name<-as.character(gsub(":","",times_gpm_hhourly[i]))
+  if(nchar(hh_gpm_name)==10){
+    hh_gpm_name<-paste0(hh_gpm_name,"_000000")
+  }
   hh_gpm_name<-gsub("-","",hh_gpm_name)
   hh_gpm_name<-gsub(" ","_",hh_gpm_name)
-  path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_hh",hh_gpm_name,".nc4"))
+  path_to_output_gpm_data<-file.path(path_to_rainfall_folder,paste0("GPM_hh_",hh_gpm_name,".nc4"))
   rainfall_hhourly_list_paths<-c(rainfall_hhourly_list_paths,path_to_output_gpm_data)
   if (!(file.exists(path_to_output_gpm_data))){
     httr::GET(url = url_opendap, write_disk(path_to_output_gpm_data))
@@ -1793,9 +1809,6 @@ while (is.null(records)){
 # Remove grass temporary folder
 system(paste0("rm -r ", file.path(getwd(),"GRASS_TEMP")))  
 file.remove(file.path(getwd(),".grassrc7"))
-
-# Close the connection to the database
-dbDisconnect(react_db)
 
 #### stop cluster ####
 #stopCluster(cl)

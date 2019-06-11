@@ -11,8 +11,7 @@
 # wps.in: id = path_to_ground_truth_data, type = string, title = Name of the ground truth dataset in the vfolder, value = "groundtruth_bf.gpkg" ;
 # wps.in: id = column_names_lc_classes_hierarchy, type = string, title = Vector of the columns names of land cover classes in the ground truth dataset, with the hierarchical structure. eg : c("type_1","type_2"). Typically type_1 is the most aggregated land cover, type_2 is a less aggregated classification, etc., value = c("level_1_fr","level_2_fr","level_3_fr","level_4_fr","level_5_fr") ;
 # wps.in: id = column_name_lc_classification, type = string, title =  Desired hierarchy level for the final classification, value = "level_4_fr";
-# wps.in: id = copernicus_scihub_username, type = string, title = Copenicus scihub username (to download Sentinel 2 data), value = "user";
-# wps.in: id = copernicus_scihub_password, type = string, title = Copenicus scihub password, value = "***";
+# wps.in: id = path_to_copernicus_scihub_credentials, type = string, title = Path to the text file containing the credentials to ESA Copernicus scihub, value = "credentials_copernicus.txt";
 # wps.in: id = Sentinel2_products_uuid, type = string, title = Vector of Ids of the S2 products to download in the Copernicus Scihub, value = c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de") ;
 # wps.in: id = proj_srs, type = string, title = Proj srs for the ROI, value = "+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs" ;
 # wps.in: id = threshold_accumulation_raster, type = integer, Threshold to use for the water accumulation raster file as hydrographic network. All cells above this threshold are considered as the hydrographic network., value = "800" ;
@@ -124,12 +123,11 @@ path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 
 
 ### Parameters for step 3 : Downloading ancillary data
-copernicus_scihub_username="ptaconet" #<Copenicus scihub username>
-copernicus_scihub_password="HHKcue51"  #<Copenicus scihub password>
-Sentinel2_products_uuid<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de") #<Ids of the products to download in the Copernicus Scihub>
+path_to_copernicus_scihub_credentials<-"credentials_copernicus.txt" # <path to the file containing the credential to the ESA Sentinel data server (Copenicus Scihub)>
+Sentinel2_products_uuid<-c("6236fb46-41c1-4950-b6c8-602c48b90049","89bc8775-cc0c-4dc8-8ee3-6c9115d75fa3") #<Ids of the products to download in the Copernicus Scihub>
 time_range <-  c("2018-12-01", "2018-12-10")
 # BF: Sentinel2_products_uuid<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de")
-# CIV: Sentinel2_products_uuid<-c("6236fb46-41c1-4950-b6c8-602c48b90049")
+# CIV: Sentinel2_products_uuid<-c("6236fb46-41c1-4950-b6c8-602c48b90049","89bc8775-cc0c-4dc8-8ee3-6c9115d75fa3)
 
 ### Parameters for step 4
 proj_srs="+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs" #<proj srs for the ROI>
@@ -148,7 +146,7 @@ segmentation_threshold=100       #<segmentation scale parameter>
 segmentation_cw=0.1              #<segmentation shape parameter> 
 segmentation_sw=0.9             #<segmentation spectral parameter>
 # BF: segmentation_threshold<-100
-# CIV: threshold_accumulation_raster<-160
+# CIV: segmentation_threshold<-160
 # BF: segmentation_cw<-0.1
 # CIV: segmentation_cw<-0.1
 # BF: segmentation_sw<-0.9
@@ -156,7 +154,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 
 ### Parameters for step 7
 path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
-path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"civ_groundtruth_objects_segmentation.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
+path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"civ_groundtruth_objects_segmentation_v_classes_update.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
 methods_to_compute<-"avg,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
                               "slope",
@@ -254,7 +252,7 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
                              
 ### Parameters for step 8
 column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("L1","L2"). Typically L1 is the most aggregated land cover, L2 is a less aggregated classification, etc.>
-column_name_lc_classification<-"L4" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
+#column_name_lc_classification<-"L4" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -278,7 +276,7 @@ require(cowplot)
 require(randomForest)
 require(caret)
 require(HieRanFor) ## Downloaded in the supplementary material of the Gavish et al. article. To download here: https://ars.els-cdn.com/content/image/1-s2.0-S0924271617303696-mmc5.zip and manually install on the R packages folder of your system.
-require(getSpatialData) ## not published in the CRAN. More info at http://jxsw.de/getSpatialData/index.html
+require(httr)
 
 
 #### Provide useful functions
@@ -573,6 +571,11 @@ save_classif_to_disk_function<-function(dataset_classified, dataset_to_classify_
 ### Set working directory
 setwd(path_to_processing_folder)
 
+## Connection to Copernicus (Sentinel data)
+copenicus_credentials<-readLines(path_to_copernicus_scihub_credentials)
+copernicus_scihub_username<-strsplit(copenicus_credentials,"=")[[1]][2]
+copernicus_scihub_password<-strsplit(copenicus_credentials,"=")[[2]][2]
+
 ### Set the paths of output folders / files
 path_to_spot67_raw_folder<-file.path(path_to_processing_folder,"VHR_SPOT6/raw_data") # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
 # Step 1
@@ -631,7 +634,12 @@ cat("Starting workflow")
 cat("Downloading the DEM SRTM tiles corresponding to the ROI...")
 system(paste0(file.path(path_to_otbApplications_folder,"otbcli_DownloadSRTMTiles")," -vl ",file.path(path_to_processing_folder,path_to_roi_vector)," -mode download -tiledir ",file.path(path_to_dem_raw_folder)))
 cat("OK")
-
+products_to_preprocess<-list.files(path_to_dem_raw_folder,full.names = T)
+# Unzip the files
+for (i in 1:length(products_to_preprocess)){
+  unzip(products_to_preprocess[i],exdir = path_to_dem_raw_folder)
+}
+file.remove(products_to_preprocess)
 
 ########################################################################################################################
 ########################################################################################################################
@@ -647,22 +655,16 @@ cat("OK")
 
 cat("Downloading the ancillary data: Sentinel 2 product(s) ...")
 
-## set login credentials
-login_CopHub(username = copernicus_scihub_username, password = copernicus_scihub_password)
+httr::set_config(authenticate(user=copernicus_scihub_username, password=copernicus_scihub_password, type = "basic"))
 
-# get available images and filter
-roi_sf <- read_sf(path_to_roi_vector)$geometry
-records <- getSpatialData::getSentinel_query(time_range = time_range, platform = "Sentinel-2", aoi=roi_sf)
-records <- records[which(records$uuid %in% Sentinel2_products_uuid),]
-
-for (i in 1:length(records)){
-  
-  getSpatialData::getSentinel_query(records,dir_out = path_to_sentinel2_raw_folder)
-  
+for (i in 1:length(Sentinel2_products_uuid)){
+  url_s2_tile<-paste0("https://scihub.copernicus.eu/dhus/odata/v1/Products('",Sentinel2_products_uuid[i],"')/$value")
+  httr::GET(url_s2_tile,write_disk(file.path(path_to_sentinel2_raw_folder,paste0(Sentinel2_products_uuid[i],".zip"))))
   # other option : from: https://scihub.copernicus.eu/userguide/BatchScripting
   # wget --content-disposition --continue --user={USERNAME} --password={PASSWORD}"https://scihub.copernicus.eu/dhus/odata/v1/Products('22e7af63-07ad-4076-8541-f6655388dc5e')/\$value"
   #system(paste0("wget --content-disposition --continue --user=",copernicus_scihub_username," --password=",copernicus_scihub_password," --directory-prefix ",path_to_sentinel2_raw_folder," \"https://scihub.copernicus.eu/dhus/odata/v1/Products('",Sentinel2_products_uuid[i],"')/\\$value\\"))
 }
+
 cat("Downloading the ancillary data: Sentinel 2 product(s) OK")
 
 
@@ -765,7 +767,7 @@ for (i in 1:length(products_to_preprocess)){
   system(otb_appli)
 
   ### Remove temporary files and folders
-  file.remove(setdiff(list.files(spot67_preprocessing_output_folder_path,full.names = T),c(PAN_roi_path,MS_roi_path,PANSHARPEN_roi_path,gsub(".TIF",".geom",PAN_roi_path),gsub(".TIF",".geom",MS_roi_path),gsub(".TIF",".geom",PANSHARPEN_roi_path))))
+  file.remove(setdiff(list.files(spot67_preprocessing_output_folder_path,full.names = T),c(PAN_roi_path,PANSHARPEN_roi_path,gsub(".TIF",".geom",PAN_roi_path),gsub(".TIF",".geom",PANSHARPEN_roi_path))))
   folder_to_remove=list.files(products_to_preprocess[i],full.names = T)[!grepl('.tar', list.files(products_to_preprocess[i],full.names = T))]
   for (i in 1:length(folder_to_remove)){
     system(paste0("rm -r ", folder_to_remove[i]))  
@@ -780,18 +782,18 @@ if(length(products_to_preprocess)>1){
   #dir.create(file.path(path_to_spot67_preprocessed_folder,"mosaic"))
   all_preprocessed_data<-list.files(path_to_spot67_preprocessed_folder,recursive = T,full.names = T)
   
-  MS_to_mosaic_paths=rev(all_preprocessed_data[grepl('MS.TIF', all_preprocessed_data)])
   PAN_to_mosaic_paths=rev(all_preprocessed_data[grepl('PAN.TIF', all_preprocessed_data)])
   PANSHARPEN_to_mosaic_paths=rev(all_preprocessed_data[grepl('PANSHARPEN.TIF', all_preprocessed_data)])
   
   # We perform a very simple mosaic, by simply copying the last image over earlier ones in areas of overlap. We could perform much more advanced mosaicing operations with the otbcli_Mosaic application (for additional details: https://github.com/remicres/otb-mosaic)
   cat("Mosaicing the multiple images ...")
-  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(MS_to_mosaic_paths, collapse = " ")," -comp.feather none -harmo.method none -out ",path_to_spot67_preprocessed_ms," uint16")
-  system(otb_appli)
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(PAN_to_mosaic_paths, collapse = " ")," -comp.feather none -harmo.method none -out ",path_to_spot67_preprocessed_pan," uint16")
   system(otb_appli)
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_Mosaic")," -il ",paste(PANSHARPEN_to_mosaic_paths, collapse = " ")," -comp.feather none -harmo.method none -out ",path_to_spot67_preprocessed_pansharpen," uint16")
   system(otb_appli)
+  for (i in 1:length(products_to_preprocess)){
+    system(paste0("rm -r ", products_to_preprocess[i]))  
+  }
   cat("Done")
 } else {
   file.copy(list.files(spot67_preprocessing_output_folder_path,full.names = T),path_to_spot67_preprocessed_folder)
@@ -815,13 +817,7 @@ cat("Pre-processing the Spot6/7 products OK")
 cat("Pre-processing the DEM : if relevant, mosaicing the various tiles and extracting the ROI ...")
 
 # List the products
-products_to_preprocess<-list.files(path_to_dem_raw_folder,full.names = T)
-# Unzip the files
-for (i in 1:length(products_to_preprocess)){
-unzip(products_to_preprocess[i],exdir = path_to_dem_raw_folder)
-}
-file.remove(products_to_preprocess)
-products_to_preprocess<-list.files(path_to_dem_raw_folder,full.names = T)
+products_to_preprocess<-list.files(path_to_dem_raw_folder,pattern = ".hgt",full.names = T)
 # If there are multiple tiles, mosaic them and then extract the ROI, else only extract the ROI
 if(length(products_to_preprocess)>1){
   res<-mosaic_and_extract_roi(products_to_preprocess,dem_output_path_file,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
@@ -831,13 +827,10 @@ if(length(products_to_preprocess)>1){
 cat(res)
 
 # Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
-system(paste0("gdalwarp -t_srs '",proj_srs,"' -overwrite ",dem_output_path_file," ",gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file)))
-# TODO adapt using the gdalUtils::gdalwrap function
-# gdalwarp(srcfile=dem_output_path_file,dstfile=gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file),t_srs=proj_srs,overwrite=TRUE)
-
+gdalUtils::gdalwarp(srcfile=dem_output_path_file,dstfile=gsub("DEM.tif","DEM_temp.tif",dem_output_path_file),t_srs=proj_srs,overwrite=TRUE)
 
 file.remove(dem_output_path_file)
-file.rename(gsub("DEM.TIF","DEM_temp.TIF",dem_output_path_file),dem_output_path_file)
+file.rename(gsub("DEM.tif","DEM_temp.tif",dem_output_path_file),dem_output_path_file)
 
 ##############################################################
 #### 4.2 - preprocessing the Sentinel 2 product(s) : mosaicing the various tiles if relevant, and then extracting the ROI ####
@@ -883,26 +876,33 @@ for (i in 1:length(patterns)){
 ## We use GRASS, calling it in R using the "rgrass7" package. We use two GRASS applications: r.slope.aspect and r.terraflow . Grass must be installed on the computer.
 
 # Set output paths
+dem_depressionless_output_path<-file.path(path_to_dem_preprocessed_folder,"DEM_depressionless.tif")
 slope_output_path<-file.path(path_to_dem_preprocessed_folder,"slope.tif")
 aspect_output_path<-file.path(path_to_dem_preprocessed_folder,"aspect.tif")
 accumulation_output_path<-file.path(path_to_dem_preprocessed_folder,"accumulation.tif")
-direction_output_path<-file.path(path_to_dem_preprocessed_folder,"direction.tif")
-tci_output_path<-file.path(path_to_dem_preprocessed_folder,"tci.tif") 
+twi_output_path<-file.path(path_to_dem_preprocessed_folder,"twi.tif") 
 
 # Import DEM to GRASS and set region
 execGRASS("r.external", flags="o", parameters=list(input=dem_output_path_file, output="tmprast",band=1))
 execGRASS("g.region", parameters=list(raster="tmprast")) 
 
+# Filters and generates a depressionless elevation map
+execGRASS("r.fill.dir", flags="overwrite", parameters=list(input="tmprast", output="DEM",direction="dir"))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="DEM", output=dem_depressionless_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
 # Compute slope and aspect and save to disk
-execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="tmprast", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
+execGRASS("r.slope.aspect", flags="overwrite", parameters=list(elevation="DEM", slope="slope",aspect="aspect",format="percent", precision="FCELL",zscale=1,min_slope=0))
 execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="slope", output=slope_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="aspect", output=aspect_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
 
 # Compute hydrograpy indices and save to disk
-execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="tmprast", direction="direction",accumulation="accumulation",tci="tci"))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="direction", output=direction_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+execGRASS("r.terraflow", flags="overwrite", parameters=list(elevation="DEM", direction="direction",accumulation="accumulation",tci="tci"))
 execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="accumulation", output=accumulation_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
-execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="tci", output=tci_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
+# Compute TWI indice
+execGRASS("r.topidx", flags="overwrite", parameters=list(input="DEM", output="twi"))
+execGRASS("r.out.gdal", flags=c("t","m","overwrite"), parameters=list(input="twi", output=twi_output_path, format="GTiff",  createopt="TFW=YES,COMPRESS=LZW" ))
+
 
 # Create accumulation vector file given the threshold. This dataset will be used afterwards for the computation of the zonal statistics (distance to hydographic network)
 acc_raster<-raster(accumulation_output_path)
@@ -920,7 +920,7 @@ file.remove(output_path)
 
 
 # We disaggregate the resolution of the rasters because some small objets send back NA values with a 30 m resolution DEM
-rasters_to_disaggregate<-c(dem_output_path_file,slope_output_path,aspect_output_path,accumulation_output_path,direction_output_path,tci_output_path)
+rasters_to_disaggregate<-c(dem_depressionless_output_path,slope_output_path,aspect_output_path,accumulation_output_path,twi_output_path)
 cat("Disaggregating the resolutions of the rasters")
 for (i in 1:length(rasters_to_disaggregate)){
 rast<-raster(rasters_to_disaggregate[i])
@@ -945,36 +945,38 @@ max<-as.numeric(cellStats(rast,max))
 # Using the application available in the official release (does not enable to select the set of textures)
 for (i in 1:length(xrad)){
   
-path_to_simple_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_simple_textural_indices)
-path_to_advanced_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_advanced_textural_indices)
+  path_to_simple_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_simple_textural_indices)
+  path_to_advanced_texture<-gsub(".TIF",paste0("_",xrad[i],"_",xrad[i],".TIF"),path_to_advanced_textural_indices)
   
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture simple -out ",path_to_simple_texture)
-system(otb_appli)
+  cat(paste0("Computing simple texture indices for radius = ",xrad[i]))
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture simple -out ",path_to_simple_texture)
+  system(otb_appli)
 
-## Split the textures into n bands (1 / texture)
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_simple_texture," -out ",path_to_simple_texture)
-system(otb_appli)
+  ## Split the textures into n bands (1 / texture)
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_simple_texture," -out ",path_to_simple_texture)
+  system(otb_appli)
 
-## Remove useless textures (textures that we will not use for the classification)
-# We keep : energy (HaralickTextures_simple_0), entropy (HaralickTextures_simple_1), correlation (HaralickTextures_simple_2), inertia (HaralickTextures_simple_4 - distinction sols nu / bati), Haralick correlation (HaralickTextures_simple_7)
-file.remove(c(path_to_simple_texture,
+  ## Remove useless textures (textures that we will not use for the classification)
+  # We keep : energy (HaralickTextures_simple_0), entropy (HaralickTextures_simple_1), correlation (HaralickTextures_simple_2), inertia (HaralickTextures_simple_4 - distinction sols nu / bati), Haralick correlation (HaralickTextures_simple_7)
+  file.remove(c(path_to_simple_texture,
           gsub(".TIF","_3.TIF",path_to_simple_texture),
           gsub(".TIF","_5.TIF",path_to_simple_texture),
           gsub(".TIF","_6.TIF",path_to_simple_texture)
           ))
 
-## Compute advanced textures
-# Using the application available in the official release (does not enable to select the set of textures)
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture advanced -out ",path_to_advanced_texture)
-system(otb_appli)
+  ## Compute advanced textures
+  # Using the application available in the official release (does not enable to select the set of textures)
+  cat(paste0("Computing advanced texture indices for radius = ",xrad[i]))
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture advanced -out ",path_to_advanced_texture)
+  system(otb_appli)
 
-## Split the textures into n bands (1 / texture)
-otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_advanced_texture," -out ",path_to_advanced_texture)
-system(otb_appli)
+  ## Split the textures into n bands (1 / texture)
+  otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_advanced_texture," -out ",path_to_advanced_texture)
+  system(otb_appli)
 
-## Remove useless textures (textures that we will not use for the classification)
-# We keep : mean (HaralickTextures_advanced_0)
-file.remove(c(path_to_advanced_texture,
+  ## Remove useless textures (textures that we will not use for the classification)
+  # We keep : mean (HaralickTextures_advanced_0)
+  file.remove(c(path_to_advanced_texture,
               gsub(".TIF","_1.TIF",path_to_advanced_texture),
               gsub(".TIF","_2.TIF",path_to_advanced_texture),
               gsub(".TIF","_3.TIF",path_to_advanced_texture),
@@ -984,7 +986,7 @@ file.remove(c(path_to_advanced_texture,
               gsub(".TIF","_7.TIF",path_to_advanced_texture),
               gsub(".TIF","_8.TIF",path_to_advanced_texture),
               gsub(".TIF","_9.TIF",path_to_advanced_texture)
-))
+  ))
 
 }
 
@@ -1047,12 +1049,12 @@ bri<-sqrt(b03^2+b04^2+b05^2+b06^2+b07^2+b08^2+b08A^2+b11^2+b12^2)
 writeRaster(bri,file.path(path_to_sentinel2_preprocessed_folder,"BRI.TIF"))
 
 # Compute NDWI
-ndnwi<-(b03-b08)/(b03+b08)
-writeRaster(ndnwi,file.path(path_to_sentinel2_preprocessed_folder,"NDWI.TIF"))
+ndwi<-(b03-b08)/(b03+b08)
+writeRaster(ndwi,file.path(path_to_sentinel2_preprocessed_folder,"NDWI.TIF"))
 
 # Compute MNDWI
-mndnwi<-(b03-b11)/(b03+b11)
-writeRaster(mndnwi,file.path(path_to_sentinel2_preprocessed_folder,"MNDWI.TIF"))
+mndwi<-(b03-b11)/(b03+b11)
+writeRaster(mndwi,file.path(path_to_sentinel2_preprocessed_folder,"MNDWI.TIF"))
 
 
 ##############################################################
@@ -1087,6 +1089,7 @@ otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_LSGRM")," -in
 system(otb_appli)
 
 # Output of the segmentation is a raster. Vectorize
+# An R function to polygonize (uses also gdal_polygonize.py) : https://johnbaumgartner.wordpress.com/2012/07/26/getting-rasters-into-shape-from-r/
 #path_to_output_segmentation_vector=file.path(path_to_outputFiles_segmentation_folder,paste0(outputImageName,"_segmented_final.gpkg"))
 gdal_appli<-paste0("gdal_polygonize.py ",gsub(".gpkg",".TIF",path_to_segmented_dataset)," ",path_to_segmented_dataset," -b 1 None DN")
 system(gdal_appli)

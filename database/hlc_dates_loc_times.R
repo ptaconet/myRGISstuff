@@ -89,11 +89,11 @@ coords_median_postecapture_bf<-rbind(coords_median_postecapture_bf,c("1DMB4i","B
 
 coords_median_postecapture_bf$quality_flag_horaires<-1
 coords_median_postecapture_bf$poindecapture<-substr(coords_median_postecapture_bf$idpostedecapture,5,5)
-coords_median_postecapture_bf$idpoindecapture<-substr(coords_median_postecapture_bf$idpostedecapture,1,5)
+coords_median_postecapture_bf$idpointdecapture<-substr(coords_median_postecapture_bf$idpostedecapture,1,5)
 coords_median_postecapture_bf$idpostedecapture<-NULL
 coords_median_postecapture_bf<-unique(coords_median_postecapture_bf)
 
-colnames(coords_median_postecapture_bf)<-c("codepays","latitude","longitude","nummission","codevillage","date_capture","date_heure_debut","date_heure_fin","quality_flag_position","quality_flag_horaires","pointdecapture","idpoindecapture")
+colnames(coords_median_postecapture_bf)<-c("codepays","latitude","longitude","nummission","codevillage","date_capture","date_heure_debut","date_heure_fin","quality_flag_position","quality_flag_horaires","pointdecapture","idpointdecapture")
 coords_median_postecapture_bf<-coords_median_postecapture_bf %>% mutate_all(as.character)
 
 ## On vérifie et éventuellement on corrige les dates pour la CIV
@@ -228,17 +228,30 @@ coords_median_postecapture_civ$date_min<-as.character(coords_median_postecapture
 coords_median_postecapture_civ$date_max<-as.character(coords_median_postecapture_civ$date_max)
 
 
-coords_median_postecapture_civ$idpoindecapture<-substr(coords_median_postecapture_civ$idpostedecapture,1,5)
+coords_median_postecapture_civ$idpointdecapture<-substr(coords_median_postecapture_civ$idpostedecapture,1,5)
 coords_median_postecapture_civ$idpostedecapture<-coords_median_postecapture_civ$postedecapture<-NULL
 coords_median_postecapture_civ<-unique(coords_median_postecapture_civ)
 
-colnames(coords_median_postecapture_civ)<-c("codepays","latitude","longitude","quality_flag_position","nummission","codevillage","pointdecapture","date_capture","date_heure_debut","date_heure_fin","quality_flag_horaires","idpoindecapture")
+colnames(coords_median_postecapture_civ)<-c("codepays","latitude","longitude","quality_flag_position","nummission","codevillage","pointdecapture","date_capture","date_heure_debut","date_heure_fin","quality_flag_horaires","idpointdecapture")
 coords_median_postecapture_civ<-coords_median_postecapture_civ %>% mutate_all(as.character)
 
 hlc_dates_loc_times<-rbind(coords_median_postecapture_bf,coords_median_postecapture_civ)
 
 hlc_dates_loc_times$quality_flag_dates<-"1"
-hlc_dates_loc_times <-hlc_dates_loc_times %>% dplyr::select(idpoindecapture,nummission,codevillage,pointdecapture,codepays,longitude,latitude,date_capture,date_heure_debut,date_heure_fin,quality_flag_position,quality_flag_dates,quality_flag_horaires) %>% arrange(codepays,idpoindecapture)
+hlc_dates_loc_times <-hlc_dates_loc_times %>% dplyr::select(idpointdecapture,nummission,codevillage,pointdecapture,codepays,longitude,latitude,date_capture,date_heure_debut,date_heure_fin,quality_flag_position,quality_flag_dates,quality_flag_horaires) %>% arrange(codepays,idpointdecapture)
+
+#### Vérification via qq graphiques
+#hlc_dates_loc_times$nummission<-as.numeric(hlc_dates_loc_times$nummission)
+#hlc_dates_loc_times$pointdecapture<-as.numeric(hlc_dates_loc_times$pointdecapture)
+#hlc_dates_loc_times$date_capture<-as.Date(hlc_dates_loc_times$date_capture)
+#hlc_dates_loc_times$date_heure_debut<-as.POSIXct(hlc_dates_loc_times$date_heure_debut)
+#hlc_dates_loc_times$date_heure_fin<-as.POSIXct(hlc_dates_loc_times$date_heure_fin)
+
+#dat<-hlc_dates_loc_times %>% filter(codepays=="BF")
+
+#hist(dat$date_heure_debut,"week") # répartition dans le temps des jours de capture
+#hist(as.numeric(dat$date_heure_fin-dat$date_heure_debut)) # durée des captures
+#nb_pts_captures_villages_mission<-dat %>% group_by(codepays,codevillage,nummission) %>% summarise(count=n())
 
 
 

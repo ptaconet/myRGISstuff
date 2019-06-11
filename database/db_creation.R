@@ -7,8 +7,8 @@ require(raster)
 require(gdalUtils)
 require(readxl)
 
-path_to_amal_database<-"/home/ptaconet/Bureau/React_dbase_V7.db"  
-path_to_gpkg_database<-"/home/ptaconet/Bureau/react_db.gpkg"  # Empty gpkg template is available here : http://www.geopackage.org/data/empty.gpkg
+path_to_amal_database<-"/home/ptaconet/Documents/react/miscellaneous_data/React_dbase_V7.db"  
+path_to_gpkg_database<-"/home/ptaconet/Documents/react/react_db.gpkg"  # Empty gpkg template is available here : http://www.geopackage.org/data/empty.gpkg
 path_to_metadata_table<-"/home/ptaconet/r_react/database/metadata.csv"
 path_to_metadata_mapping_table<-"/home/ptaconet/r_react/database/metadata_mapping.csv"
 
@@ -61,6 +61,7 @@ menages<-dbGetQuery(amal_db, query)
 menages$Latitude <- as.numeric(gsub(",",".",menages$Latitude))
 menages$Longitude <- as.numeric(gsub(",",".",menages$Longitude))
 menages$codevillage_fk[which(menages$codevillage_fk=="KOL" & menages$codemenage_pk %in% c("LOK062","LOK012"))]<-"LOK"
+menages$codevillage_fk[which(menages$codemenage_pk=="PEN035")]<-"PEN"
 index_menages_nam<-which(is.na(menages$Latitude) & menages$codevillage_fk=="NAA")
 codemenage_menages_nam<-menages$codemenage_pk[index_menages_nam]
 menages$codemenage_pk[index_menages_nam]<-gsub("NAA","NAM",menages$codemenage_pk[index_menages_nam])
@@ -121,7 +122,7 @@ df_villages_loc_pop_sf<-cbind(df_villages_loc_pop_sf,st_coordinates(df_villages_
 st_write(df_villages_loc_pop_sf, path_to_gpkg_database, "villages_loc_pop", update = TRUE)
 
 # raw_dates_hlc
-raw_bf_dates_hlc<-read_excel("/home/ptaconet/Bureau/reprise_data_amal/Heure de captures REACT-BF_M1_M7.xls")
+raw_bf_dates_hlc<-read_excel("/home/ptaconet/Documents/react/miscellaneous_data/Heure de captures REACT-BF_M1_M7.xls")
 colnames(raw_bf_dates_hlc)<-c("n_mission","nomvillage","codevillage","CSPS","date_de_captures","heure_de_debut","heure_de_fin","n_sac","observations")
 raw_bf_dates_hlc$date_de_captures<-as.character(as.Date(raw_bf_dates_hlc$date_de_captures, format="%d/%m/%Y"))
 raw_bf_dates_hlc$codepays<-"BF"
@@ -133,7 +134,7 @@ raw_bf_dates_hlc$heure_de_debut<-paste0(raw_bf_dates_hlc$heure_de_debut,":00")
 raw_bf_dates_hlc$heure_de_fin<-paste0(raw_bf_dates_hlc$heure_de_fin,":00")
 raw_bf_dates_hlc$date_heure_debut<-paste(raw_bf_dates_hlc$date_de_captures,raw_bf_dates_hlc$heure_de_debut,sep=" ")
 raw_bf_dates_hlc$date_heure_fin<-paste(as.Date(raw_bf_dates_hlc$date_de_captures)+1,raw_bf_dates_hlc$heure_de_fin,sep=" ")
-raw_civ_dates_hlc<-read_excel("/home/ptaconet/Bureau/reprise_data_amal/Dates_capture entomo cote  d'Ivoire.xlsx")
+raw_civ_dates_hlc<-read_excel("/home/ptaconet/Documents/react/miscellaneous_data/Dates_capture entomo cote  d'Ivoire.xlsx")
 colnames(raw_civ_dates_hlc)<-c("date_de_captures","nomvillage","n_mission")
 raw_civ_dates_hlc$date_de_captures<-as.character(raw_civ_dates_hlc$date_de_captures)
 raw_civ_dates_hlc$nomvillage <- raw_civ_dates_hlc$nomvillage %>% str_replace_all(c("Penatiguikaha" = "Penatiguikaha_Gopko", "Logaha" = "Lokaha","Kolékaha"= "Kolekaha","Lagomokaha"= "Lagomounkaha","Yenessonkaha"= "Yenessonkaha_Gofionkaha","Narlougokaha"= "Nalourgokala","Katiorpokaha"= "Katiorkpo","Kogninguekaha"= "Koguin","Tagbarakaha"= "Tagbara","Nongotakaha"= "Nongotanakaha","Karafiné"= "Karafine","Nongowélékaha"= "Nangowelekaha","Kougniguékaha"= "Koungniguékaha","Félékaha"= "Felekaha","Tahouélékaha"= "Tahouelekaha","Blaouara"= "Blawara" ))
@@ -160,7 +161,7 @@ st_write(ground_truth_data_civ_revised, path_to_gpkg_database, "lu_lc_ground_tru
 
 ground_truth_data_bf_raw<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/bf_groundtruth_vector_32630.gpkg")
 st_write(ground_truth_data_bf_raw, path_to_gpkg_database, "lu_lc_ground_truth_bf_raw", update = TRUE)
-ground_truth_data_bf_revised<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_objects_segmentation.gpkg")
+ground_truth_data_bf_revised<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/groundtruth_bf.gpkg")
 st_write(ground_truth_data_bf_revised, path_to_gpkg_database, "lu_lc_ground_truth_bf_rev", update = TRUE)
 
 # Pedology (raster)

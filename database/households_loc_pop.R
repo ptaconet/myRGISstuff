@@ -1,7 +1,7 @@
 # Script to correct the households data from the orignial data stored in the DB v7
 require(RSQLite)
 require(dplyr)
-#react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_empty_database)
+react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
 sql_query_households_loc_pop<-"SELECT
 raw_menages.codemenage as codemenage, count(codeindividu) as population, raw_menages.Y as latitude,raw_menages.X as longitude, raw_villages.codevillage as village,raw_villages.codepays
 FROM
@@ -61,6 +61,8 @@ df_households_loc_pop_without_coords<-merge(df_households_loc_pop_without_coords
 
 df_households_loc_pop<-rbind(df_households_loc_pop,df_households_loc_pop_without_coords)
 
+colnames(df_households_loc_pop)[which(colnames(df_households_loc_pop)=="village")]<-"codevillage"
+
 # Correction des points abérrants
 
 df_households_loc_pop[571,c("latitude","longitude")]<-df_households_loc_pop_mean_pos_by_vill[which(df_households_loc_pop_mean_pos_by_vill$village=="KAR"),c("latitude","longitude")]
@@ -71,5 +73,5 @@ df_households_loc_pop[309,c("latitude","longitude")]<-df_households_loc_pop_mean
 
 # Ajout attention
 df_households_loc_pop$note_importante<-NA
-df_households_loc_pop$note_importante[which(df_households_loc_pop$village %in% c("BLA","NAM"))]<-"Attention les données de localisation (X et Y) des ménages pour BLA et NAM sont FAUSSES !! on ne les a intégré ici que pour avoir l'étendue spatiale maximale du village. Cependant les données de population (nombre d’habitants) sont justes."
+df_households_loc_pop$note_importante[which(df_households_loc_pop$codevillage %in% c("BLA","NAM"))]<-"Attention les données de localisation (X et Y) des ménages pour BLA et NAM sont FAUSSES !! on ne les a intégré ici que pour avoir l'étendue spatiale maximale du village. Cependant les données de population (nombre d’habitants) sont justes."
   
