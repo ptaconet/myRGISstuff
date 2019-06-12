@@ -1,7 +1,7 @@
-require(RSQLite)
-require(dplyr)
-require(lubridate)
-react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
+#require(RSQLite)
+#require(dplyr)
+#require(lubridate)
+#react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
 
 query<-"SELECT * FROM raw_supervcapture"
 

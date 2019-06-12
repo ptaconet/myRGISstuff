@@ -118,20 +118,22 @@ rm(list = ls())
 ### Global variables used throughout the WF
 path_to_otbApplications_folder<-"/home/ptaconet/OTB-6.6.1-Linux64/bin"
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
-path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
+path_to_processing_folder<-"/home/ptaconet/Documents/react/data_BF"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 
 
-### Parameters for step 3 : Downloading ancillary data
+### Parameters for step 2 : Downloading ancillary data
 path_to_copernicus_scihub_credentials<-"credentials_copernicus.txt" # <path to the file containing the credential to the ESA Sentinel data server (Copenicus Scihub)>
-Sentinel2_products_uuid<-c("6236fb46-41c1-4950-b6c8-602c48b90049","89bc8775-cc0c-4dc8-8ee3-6c9115d75fa3") #<Ids of the products to download in the Copernicus Scihub>
-time_range <-  c("2018-12-01", "2018-12-10")
+Sentinel2_products_uuid<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de") #<Ids of the products to download in the Copernicus Scihub>
 # BF: Sentinel2_products_uuid<-c("bc6bafd7-d44f-4d62-8754-3cc4ba4e8cc0","18895056-852f-4a4f-a3aa-ca7882fe79de")
 # CIV: Sentinel2_products_uuid<-c("6236fb46-41c1-4950-b6c8-602c48b90049","89bc8775-cc0c-4dc8-8ee3-6c9115d75fa3)
 
+### Parameters for step 3 : Pre-process Spot 6 images
+path_to_spot67_raw_folder<-file.path(path_to_processing_folder,"VHR_SPOT6/raw_data") # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
+
 ### Parameters for step 4
 proj_srs="+proj=utm +zone=30 +datum=WGS84 +units=m +no_defs" #<proj srs for the ROI>
-threshold_accumulation_raster<-800   #<Threshold for the water accumulation raster file. All cells above this threshold are considered as the hydrographic network.>
+threshold_accumulation_raster<-1000   #<Threshold for the water accumulation raster file. All cells above this threshold are considered as the hydrographic network.>
 xrad=c(5,9,17)  #<size of the moving windows in the x direction for the computation of the textures>
 yrad=c(5,9,17)  #<size of the moving windows in the y direction for the computation of the textures>
 nbbin=64  #<number of bins in the output image for the computation of the textures>
@@ -154,7 +156,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 
 ### Parameters for step 7
 path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
-path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"civ_groundtruth_objects_segmentation_v_classes_update.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
+path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"groundtruth_bf_v_classes_update.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
 methods_to_compute<-"avg,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
                               "slope",
@@ -202,7 +204,7 @@ indices_for_classif_labels<-c("DEM",
                               "MNDVI_S2",
                               "RNDVI_S2"
                               ) # parameter indices_for_classif_paths sets the path to each variable
-indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/processed_data/DEM.tif"),
+indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/processed_data/DEM_depressionless.tif"),
                              file.path(path_to_processing_folder,"DEM_SRTM/processed_data/slope.tif"),
                              file.path(path_to_processing_folder,"DEM_SRTM/processed_data/accumulation.tif"),
                              file.path(path_to_processing_folder,"VHR_SPOT6/processed_data/NDVI.TIF"),
@@ -252,7 +254,6 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
                              
 ### Parameters for step 8
 column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("L1","L2"). Typically L1 is the most aggregated land cover, L2 is a less aggregated classification, etc.>
-#column_name_lc_classification<-"L4" #<Name of the column of land cover class that we want to classify in the ground truth dataset. Column type must be character string>
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -387,7 +388,7 @@ plot_classif_info<-function(conf_matrix,
   confusion$Percent = round(confusion$Freq/confusion$ActualFreq*100)
   
   tile <- ggplot() +
-    geom_tile(aes(x=Actual, y=Predicted,fill=Percent),data=confusion, color="black",size=0.1) +
+    geom_tile(aes(x=Actual, y=Predicted,fill=Percent),data=confusion, color="black",size=0.3) +
     labs(x="Actual",y="Predicted")+ theme_grey(base_size = 15)
   tile = tile + 
     geom_text(aes(x=Actual,y=Predicted, label=Freq),data=confusion, size=4.5, colour="black") +
@@ -463,7 +464,7 @@ PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.d
   if (plot.type == "Tile") {
     p <- ggplot(work.data, aes(X.var, Y.var), environment = localenv)
     if (!is.null(explanatory.variable)){
-    p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col) + facet_grid(type~.,scales="free_y",space="free_y")
+    p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col, size=0.3) + facet_grid(type~.,scales="free_y",space="free_y")
     p <- p + labs(y="var. used",title = paste0("Mean decrease in accuracy of each explanatory variable in each local classifier by ",names(input.data[explanatory.variable]))) 
     } else {
       p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col)
@@ -524,32 +525,39 @@ file.remove(path_to_PerformanceHRF_modif)
 # - classification.gpkg : Vector with the objects classified + the zonal stats
 # - classification.tif : Raster version of the classification
 # - classification_group.gpkg : Vector with adjacent objects having the same class grouped
-save_classif_to_disk_function<-function(dataset_classified, dataset_to_classify_sf, path_to_output_classification_vector, path_to_outputs_folder, save_objects_raster=FALSE, save_objects_vector_group_adj_polygons=FALSE ){
+save_classif_to_disk_function<-function(dataset_classified, dataset_to_classify_sf, path_to_output_classification_data, path_to_outputs_folder, save_objects_vector=TRUE,save_objects_raster=FALSE, save_objects_vector_group_adj_polygons=FALSE ){
   
-  cat("Saving the classification as vector gpkg...\n")
   #dataset_to_classify_sf<-merge(dataset_classified,dataset_to_classify_sf,by.x="cat",by.y="DN")  ## this is for hierarchical classif
   dataset_classified<-dataset_classified[,c("DN","predicted")]
   dataset_to_classify_sf<-merge(dataset_classified,dataset_to_classify_sf,by="DN")
   dataset_to_classify_sf<-st_as_sf(dataset_to_classify_sf)
-  sf::st_write(dataset_to_classify_sf,path_to_output_classification_vector,layer_options = "OVERWRITE=true")
+  dataset_to_classify_sf<-dataset_to_classify_sf[,"predicted"]
+  
+  
+  if (save_objects_vector==TRUE){
+    cat("Saving the classification as vector gpkg...\n")
+    path_to_output_classification_vector<-paste0(path_to_output_classification_data,".gpkg")
+    sf::st_write(dataset_to_classify_sf,path_to_output_classification_vector,layer_options = "OVERWRITE=true")
+  }
   
   if (save_objects_raster==TRUE){
     cat("Saving the classification as raster tif...\n")
     ## Rasterize the classification
-    require(raster)
-    require(fasterize)
     # Set output raster characteristics
-    poly<-sf::st_read(file.path(path_to_outputs_folder,"classification.gpkg"))
     output_res<-1.633175
-    r <- raster(poly, res = output_res)
+    r <- raster(dataset_to_classify_sf, res = output_res)
     # Rasterize using fasterize (fast version of rasterize)
-    predicted<-data.frame(predicted=unique(poly$predicted))
+    predicted<-data.frame(predicted=unique(dataset_to_classify_sf$predicted))
     predicted$predicted_integer<-seq(1:nrow(predicted))
-    poly<-merge(poly,predicted,by="predicted")
-    r <- fasterize::fasterize(poly, r, field = "predicted_integer")
+    dataset_to_classify_sf<-merge(dataset_to_classify_sf,predicted,by="predicted")
+    r <- fasterize::fasterize(dataset_to_classify_sf, r, field = "predicted_integer")
     # Write the classification raster
-    path_to_output_classification_raster<-file.path(path_to_outputs_folder,"classification.tif")
+    path_to_output_classification_raster<-paste0(path_to_output_classification_data,".tif")
     writeRaster(r,path_to_output_classification_raster, overwrite=TRUE, datatype='INT2S')
+    # Write the table of correspondences between raster values and classes names
+    predicted<-predicted %>% select(predicted_integer,predicted)
+    colnames(predicted)<-c("pixval","lc_class")
+    write.csv(predicted,paste0(path_to_output_classification_data,".csv"),row.names = F)
   }
   
   if (save_objects_vector_group_adj_polygons==TRUE){
@@ -577,7 +585,6 @@ copernicus_scihub_username<-strsplit(copenicus_credentials,"=")[[1]][2]
 copernicus_scihub_password<-strsplit(copenicus_credentials,"=")[[2]][2]
 
 ### Set the paths of output folders / files
-path_to_spot67_raw_folder<-file.path(path_to_processing_folder,"VHR_SPOT6/raw_data") # Path to the folder where the Spot6/7 products are stored. Within that folder, there must be 1 folder / product. Each of these folder contains 2 files: the Panchromatic and mutlispectral .tar.gz files.
 # Step 1
 path_to_dem_raw_folder=file.path(path_to_processing_folder,"DEM_SRTM/raw_data") # Path to the folder where the DEM raw data will be stored
 # Step 2
@@ -1232,8 +1239,10 @@ res<-function_compute_zonal_statistics(path_to_ground_truth_data,path_to_ground_
 res<-function_compute_zonal_statistics(path_to_segmented_dataset,path_to_segmented_dataset_stats,indices_for_classif_paths,indices_for_classif_labels)
 
 
-## Remove saga files (very big files...)
+## Remove saga files (very big files...) and shp files
 file.remove(list.files(path_to_processing_folder,pattern = ".mgrd|.sdat|.sgrd", recursive = TRUE))
+file.remove(list.files(path_to_groundtruth_folder,pattern = ".shp|.dbf|.shx|.prj",full.names=TRUE))
+file.remove(list.files(path_to_segmentation_folder,pattern = ".shp|.dbf|.shx|.prj",full.names=TRUE))
 
 ########################################################################################################################
 ########################################################################################################################
@@ -1306,9 +1315,9 @@ for (i in 1:ncol(df_fill_missing_class_values)-1){
 ground_truth_df_flat_model<-cbind(df_fill_missing_class_values,ground_truth_df_model[,column_names_primitives])
 
 
-## To remove the variables linked to MS VHSR (but not the textures) :
+## To remove the variables linked to MS VHSR (excluding the textures) :
 #column_names_primitives<-df_primitives_types_sources$column_names_primitives[which((df_primitives_types_sources$type %in% c("ancillary","HSR")) | (df_primitives_types_sources$type=="VHSR" & df_primitives_types_sources$source=="texture"))]
-## To remove the variables linked to MS VHSR ( :
+## To remove the variables linked to MS VHSR (including the textures):
 #column_names_primitives<-df_primitives_types_sources$column_names_primitives[which(!(df_primitives_types_sources$type=="VHSR"))]
 ## To remove the variables linked to MS HSR :
 #column_names_primitives<-df_primitives_types_sources$column_names_primitives[which(!(df_primitives_types_sources$type=="HSR"))]
@@ -1589,21 +1598,22 @@ segmentation_df<-randomForest::na.roughfix(segmentation_df)
 
 for (i in 1:length(column_names_lc_classes_hierarchy)){
   cat(paste0("Classifying the objects at level ",column_names_lc_classes_hierarchy[i],"\n"))
-ground_truth_df_flat_model_this_class<-ground_truth_df_flat_model[,c(column_names_lc_classes_hierarchy[i],column_names_primitives)]
-colnames(ground_truth_df_flat_model_this_class)[1]<-"response"
-ground_truth_df_flat_model_this_class$response<-as.factor(ground_truth_df_flat_model_this_class$response)
+  ground_truth_df_flat_model_this_class<-ground_truth_df_flat_model[,c(column_names_lc_classes_hierarchy[i],column_names_primitives)]
+  colnames(ground_truth_df_flat_model_this_class)[1]<-"response"
+  ground_truth_df_flat_model_this_class$response<-as.factor(ground_truth_df_flat_model_this_class$response)
 
-model_tuned<-randomForest::tuneRF(x=ground_truth_df_flat_model_this_class[,2:ncol(ground_truth_df_flat_model_this_class)],y=ground_truth_df_flat_model_this_class$response,trace = FALSE)
-optimum_mtry<-as.numeric(model_tuned[,1][which(model_tuned[,2]==min(model_tuned[,2]))])
-model<-randomForest::randomForest(response ~ ., data=ground_truth_df_flat_model_this_class,mtry=optimum_mtry)
+  model_tuned<-randomForest::tuneRF(x=ground_truth_df_flat_model_this_class[,2:ncol(ground_truth_df_flat_model_this_class)],y=ground_truth_df_flat_model_this_class$response,trace = FALSE)
+  optimum_mtry<-as.numeric(model_tuned[,1][which(model_tuned[,2]==min(model_tuned[,2]))])
+  model<-randomForest::randomForest(response ~ ., data=ground_truth_df_flat_model_this_class,mtry=optimum_mtry)
 
-segmentation_df$predicted<-predict(model,segmentation_df)
+  segmentation_df$predicted<-predict(model,segmentation_df)
 
-cat("Saving outputs to the disk")
-res<-save_classif_to_disk_function(dataset_classified = segmentation_df, 
+  cat("Saving outputs to the disk")
+  res<-save_classif_to_disk_function(dataset_classified = segmentation_df, 
                                    dataset_to_classify_sf = segmentation_gpkg, 
-                                   path_to_output_classification_vector = file.path(path_to_classification_folder,paste0("classification_",column_names_lc_classes_hierarchy[i],".gpkg")), 
-                                   save_objects_raster=FALSE, # turn to TRUE when script is OK
+                                   path_to_output_classification_data = file.path(path_to_classification_folder,paste0("classification_",column_names_lc_classes_hierarchy[i])), 
+                                   save_objects_vector=FALSE,
+                                   save_objects_raster=TRUE,
                                    save_objects_vector_group_adj_polygons=FALSE # turn to TRUE when script is OK
                                     )
 

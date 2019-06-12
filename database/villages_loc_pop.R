@@ -1,5 +1,5 @@
-require(RSQLite)
-require(dplyr)
+#require(RSQLite)
+#require(dplyr)
 #react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
 
 query<-"select sum(households_loc_pop.population) as population, households_loc_pop.codevillage, raw_villages.codepays, raw_villages.X, raw_villages.Y

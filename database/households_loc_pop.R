@@ -1,7 +1,7 @@
 # Script to correct the households data from the orignial data stored in the DB v7
-require(RSQLite)
-require(dplyr)
-react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
+#require(RSQLite)
+#require(dplyr)
+#react_gpkg <- dbConnect(RSQLite::SQLite(),path_to_gpkg_database)
 sql_query_households_loc_pop<-"SELECT
 raw_menages.codemenage as codemenage, count(codeindividu) as population, raw_menages.Y as latitude,raw_menages.X as longitude, raw_villages.codevillage as village,raw_villages.codepays
 FROM
