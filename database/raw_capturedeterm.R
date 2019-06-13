@@ -10,6 +10,9 @@ df_capturedeterm_ci_niv1<-dbGetQuery(amal_db, query)
 df_capturedeterm_ci_niv1$identifiant<-NA
 df_capturedeterm_ci_niv1$baro_id<-NA
 df_capturedeterm_ci_niv1$row_id_pk<-NULL
+# on aligne les formats de date
+df_capturedeterm$date<-as.character(as.Date(df_capturedeterm$date))
+df_capturedeterm_ci_niv1$date<-as.character(as.Date(df_capturedeterm_ci_niv1$date,format = "%d/%m/%Y"))
 colnames(df_capturedeterm)[which(colnames(df_capturedeterm)=="idmoustique_pk")]="idmoustique"
 df_capturedeterm<-rbind(df_capturedeterm,df_capturedeterm_ci_niv1)
 df_capturedeterm$postedecapture<-gsub("int","i",df_capturedeterm$postedecapture)

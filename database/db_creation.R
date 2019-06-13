@@ -57,11 +57,11 @@ source("/home/ptaconet/r_react/database/raw_capturedeterm.R")
 df_capturedeterm <- cbind(fid = 1:nrow(df_capturedeterm), df_capturedeterm)
 dbWriteTable(react_gpkg,"raw_capturedeterm",df_capturedeterm)
 
-# households_loc_pop
-source("/home/ptaconet/r_react/database/households_loc_pop.R")
+# villages_households_loc_pop
+source("/home/ptaconet/r_react/database/villages_households_loc_pop.R")
 df_households_loc_pop_sf<-st_as_sf(df_households_loc_pop,coords =  c("longitude", "latitude"), crs = 4326 )
 df_households_loc_pop_sf<-cbind(df_households_loc_pop_sf,st_coordinates(df_households_loc_pop_sf))
-st_write(df_households_loc_pop_sf, path_to_gpkg_database, "households_loc_pop", update = TRUE)
+st_write(df_households_loc_pop_sf, path_to_gpkg_database, "villages_households_loc_pop", update = TRUE)
 
 # villages_loc_pop
 source("/home/ptaconet/r_react/database/villages_loc_pop.R")
@@ -79,6 +79,29 @@ source("/home/ptaconet/r_react/database/hlc_dates_loc_times.R")
 hlc_dates_loc_times_sf<-st_as_sf(hlc_dates_loc_times,coords =  c("longitude", "latitude"), crs = 4326 )
 hlc_dates_loc_times_sf<-cbind(hlc_dates_loc_times_sf,st_coordinates(hlc_dates_loc_times_sf))
 st_write(hlc_dates_loc_times_sf, path_to_gpkg_database, "hlc_dates_loc_times", update = TRUE)
+
+# ancillary_africa_countries  downloaded here : https://data.humdata.org/dataset/west-and-central-africa-administrative-boundaries-levels
+adm_bound_sf<-read_sf("/home/ptaconet/Documents/react/miscellaneous_data/wca_adm0/wca_adm0.shp")
+adm_bound_sf<-st_transform(adm_bound_sf,crs=4326)
+st_write(adm_bound_sf, path_to_gpkg_database, "ancillary_africa_countries", update = TRUE)
+
+# ancillary_bound_project
+roi_civ_sf<-read_sf("/home/ptaconet/Documents/react/data_CIV/ROI.kml")
+roi_civ_sf$codepays<-"CI"
+roi_civ_sf<-roi_civ_sf[,"codepays"]
+roi_civ_sf<-st_cast(roi_civ_sf,"POLYGON")
+roi_bf_sf<-read_sf("/home/ptaconet/Documents/react/data_BF/ROI.kml")
+roi_bf_sf$codepays<-"BF"
+roi_bf_sf<-roi_bf_sf[,"codepays"]
+roi_bf_sf<-st_zm(roi_bf_sf,drop = TRUE, what = "ZM")
+roi<-rbind(roi_civ_sf,roi_bf_sf)
+roi<-st_transform(roi,crs=32630)
+st_write(roi, path_to_gpkg_database, "ancillary_bound_project", update = TRUE)
+
+# ancillary_africa_cities
+ancillary_africa_cities<-read_sf("/home/ptaconet/Documents/react/miscellaneous_data/africa_places/places.shp")
+ancillary_africa_cities<-st_intersection(ancillary_africa_cities,adm_bound_sf)
+st_write(ancillary_africa_cities, path_to_gpkg_database, "ancillary_africa_cities", update = TRUE)
 
 # LU/LC training and validation parcels (raw and segmented)
 ground_truth_data_civ_raw<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_vector_32630.gpkg")
@@ -124,7 +147,7 @@ LU_L4_classes$classif_level<-"L4"
 LU_L5_classes$classif_level<-"L5"
 
 LU_classes<-rbind(LU_L1_classes,LU_L2_classes,LU_L3_classes,LU_L4_classes,LU_L5_classes)
-
+LU_classes <- LU_classes %>% arrange(classif_level,pixval)
 LU_classes <- cbind(fid = 1:nrow(LU_classes), LU_classes)
 dbWriteTable(react_gpkg,"landcover_bf_pixval2class",LU_classes)
 
@@ -135,8 +158,5 @@ gdal_translate(path_to_pedology_civ,path_to_gpkg_database,ot="Float32",of="GPKG"
 gdal_translate(path_to_pedology_bf,path_to_gpkg_database,ot="Float32",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_bf"))
 
 
-
-
-
-
+dbSendQuery(react_gpkg,"VACUUM") # It is very important to Vacuum. Not vacuuming may prevent the DB to be opened. 
 dbDisconnect(react_gpkg)

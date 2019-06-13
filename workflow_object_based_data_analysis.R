@@ -32,81 +32,81 @@
 # It performs all the pre-processing, data preparation, classification and post-processing steps. Details are provided below. 
 # The script uses various R packages (see section "prepare workflow" for a list of packages used) and open-source libraries that are called through R : the Orfeo Toolbox v6.6.1 (https://www.orfeo-toolbox.org/), the GRASS library v7.4 (https://grass.osgeo.org), the GDAL library v2.2.1 (https://www.gdal.org/) and SAGA GIS v2.3.1 (http://www.saga-gis.org/en/index.html). In addition, the workflow uses a personal release of the Orfeo Toolbox for the segmentation process (since no relevant application was found in the official OTB release for the segmentation of very large images using the Baatz and Shape Generic Region Merging algorithm). The release was generated and kindly provided by Rafaelle Gaetano. It is available here: http://napoli.teledetection.fr/logiciels/otb_moringa_build_win_x64.zip
 # The methodology used in this workflow was inspired from these two articles and uses an R package developed in the frame of the Gavish et al. article (unfortunataly neither available on a git repository nor on the CRAN) (with minor adaptations for this workflow): 
-  # - Gavish et al., Comparing the performance of flat and hierarchical Habitat/Land-Cover classification models in a NATURA 2000 site, ISPRS Journal of Photogrammetry and Remote Sensing. Volume 136, February 2018, Pages 1-12 https://doi.org/10.1016/j.isprsjprs.2017.12.002
-  # - Lebourgeois et al., A Combined Random Forest and OBIA Classification Scheme for Mapping Smallholder Agriculture at Different Nomenclature Levels Using Multisource Data (Simulated Sentinel-2 Time Series, VHRS and DEM). Remote Sens. 2017, 9, 259.   https://doi.org/10.3390/rs9030259
+# - Gavish et al., Comparing the performance of flat and hierarchical Habitat/Land-Cover classification models in a NATURA 2000 site, ISPRS Journal of Photogrammetry and Remote Sensing. Volume 136, February 2018, Pages 1-12 https://doi.org/10.1016/j.isprsjprs.2017.12.002
+# - Lebourgeois et al., A Combined Random Forest and OBIA Classification Scheme for Mapping Smallholder Agriculture at Different Nomenclature Levels Using Multisource Data (Simulated Sentinel-2 Time Series, VHRS and DEM). Remote Sens. 2017, 9, 259.   https://doi.org/10.3390/rs9030259
 
 #### Workflow steps :
 ### Step 1 - Download the Digital Elevation Model (SRTM tiles) for the ROI
 ### Step 2 - Download the ancillary data :
-  ## 2.1 - Download the HRS Sentinel 2 image(s) from the Copernicus scihub
+## 2.1 - Download the HRS Sentinel 2 image(s) from the Copernicus scihub
 ### Step 3 - Pre-process the VHRS Spot6/7 image(s) :
-  ## 3.1 - fusion the tiles of the panchromatic image
-  ## 3.2 - convert the multispectral and panchromatic images from digital numbers to TOA reflectance
-  ## 3.3 - orthorectify the multispectral and panchromatic images
-  ## 3.4 - extract the ROI
-  ## 3.5 - pansharpen the MS image using the PAN image
-  ## 3.6 - mosaic the various tiles covering the ROI (if relevant)
+## 3.1 - fusion the tiles of the panchromatic image
+## 3.2 - convert the multispectral and panchromatic images from digital numbers to TOA reflectance
+## 3.3 - orthorectify the multispectral and panchromatic images
+## 3.4 - extract the ROI
+## 3.5 - pansharpen the MS image using the PAN image
+## 3.6 - mosaic the various tiles covering the ROI (if relevant)
 ### Step 4 - Preprocess the ancillary data :
-  ## 4.1 - preprocess the DEM : mosaic the various tiles covering the ROI (if relevant), and then extract the ROI
-  ## 4.2 - preprocess the Sentinel 2 image(s) : mosaic the various images covering the ROI (if relevant), and then extract the ROI
+## 4.1 - preprocess the DEM : mosaic the various tiles covering the ROI (if relevant), and then extract the ROI
+## 4.2 - preprocess the Sentinel 2 image(s) : mosaic the various images covering the ROI (if relevant), and then extract the ROI
 ### Step 5 - Prepare the data for the classification : 
-  ## 5.1 - extract ancillary indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index
-  ## 5.2 - extract textural indices from the Spot6/7 panchromatic image at various moving windows sizes
-  ## 5.3 - extract radiometric indices from the Spot6/7 pansharpened image
-  ## 5.4 - extract radiometric indices from the S2 image
-  ## 5.5 - Split the bands of the Spot6/7 image
+## 5.1 - extract ancillary indices from the DEM : slope, aspect, flow accumulation, flow direction, topographic convergence index
+## 5.2 - extract textural indices from the Spot6/7 panchromatic image at various moving windows sizes
+## 5.3 - extract radiometric indices from the Spot6/7 pansharpened image
+## 5.4 - extract radiometric indices from the S2 image
+## 5.5 - Split the bands of the Spot6/7 image
 ### Step 6 - Segment the Spot6/7 image using the Baatz and Shape Generic Region Merging algorithm
 ### Step 7 - Extract the zonal statistics (reflectance, spectral indices, textural indices, ancillary, shape, contextual)
-  ## 7.1 - Extract zonal statistics for the ground truth dataset
-  ## 7.2 - Extract zonal statistics for the segmented objects dataset
+## 7.1 - Extract zonal statistics for the ground truth dataset
+## 7.2 - Extract zonal statistics for the segmented objects dataset
 ### Step 8 - Prepare classification : generate a set of random forest classifiers using the training dataset with two approaches: i) a flat classification approach, ii) a class hierarchical structure approach. Classify the objects output of the segmentation process using the approach that gives the best results
-  ## 8.1 - Generate the RF classifiers at each class hierarchical level using i) a flat approach, ii) a hierarchical approach, and compare the results
-  ## 8.2 - Get useful information on the classification (discriminant variables, etc.) considering the class hierarchical structure
+## 8.1 - Generate the RF classifiers at each class hierarchical level using i) a flat approach, ii) a hierarchical approach, and compare the results
+## 8.2 - Get useful information on the classification (discriminant variables, etc.) considering the class hierarchical structure
 ### Step 9 - Classify
-  ## 9.1 - Classify the objects output of the segmentation using the approach that gives the best results
-  ## 9.2 - Save the classification as GIS data in various formats (vector and raster)
-  ## 9.3 - Add user criterions to enhance the classification
+## 9.1 - Classify the objects output of the segmentation using the approach that gives the best results
+## 9.2 - Save the classification as GIS data in various formats (vector and raster)
+## 9.3 - Add user criterions to enhance the classification
 
 
 #### Outputs: In the path_to_processing_folder, the following folders and files will be available : 
-  ### folder "DEM_SRTM" : data regarding the SRTM Digital Elevation Model [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
-    ## DEM_SRTM/raw_data : SRTM tile(s) covering the ROI (step 1)
-    ## DEM_SRTM/processed_data : a set of files derived from the DEM, output of the workflow :
-      # - DEM.tif : SRTM DEM cut following the ROI and re-projected in the proj_srs (step 4) ;
-      # - slope.tif : slope dataset derived from the DEM (step 5.1) ;
-      # - aspect.tif : aspect dataset derived from the DEM (step 5.1);
-      # - accumulation.tif : flow accumulation dataset derived from the DEM (step 5.1);
-      # - direction.tif : flow direction dataset derived from the DEM (step 5.1);
-      # - tci.tif : topographic convergence index derived from the DEM (note : not used in further analysis) (step 5.1);
-      # - accumulation_treshold.tif : raster with two values : 0 if the flow accumulation is above the threshold_accumulation_raster , 1 if it is under. This information is used for the calculation of the distance from the objects to the flow accumulation network (used as primitive in the classification). (step 5.1) ;
-      # - accumulation_treshold_vector.gpkg : vector version of accumulation_treshold.tif (step 5.1) ;
-  ### folder "VHR_SPOT6" : data regarding the VHRS Spot 6/7 satellite images
-    ## VHR_SPOT6/raw_data : the input Spot 6/7 data (as provided by the CNES). Must be provided by the user before execution of the workflow. There must be 1 sub-folder by image covering the ROI. Each sub-folder contains the two .tar.gz files as provided by the CNES : one for the panchromatic image and one for the multispectral image [PROVIDED BY THE USER]
-    ## VHR_SPOT6/processed_data : a set of files derived from the Spot 6/7 datasets, output of the workflow:  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
-      # - PAN.TIF : the panchromatic image, mosaiced, orthorectified and cut following the ROI (step 3.x) ;
-      # - PANSHARPEN.TIF : the multispectral image pansharpened using the panshromatic image, orthorectified and cut following the ROI (step 3.x) ;
-      # - PANSHARPEN_0.TIF, PANSHARPEN_1.TIF, PANSHARPEN_2.TIF, PANSHARPEN_3.TIF : respectively the blue, green, red and nir bands of the VHRS (step 3.x) ;
-      # - HaralickTextures_xxxx.TIF : the set of textures generated using from the panchromatic image, at various moving windows sizes (step 5.2) ;
-      # - NDVI.TIF, NDWI.TIF, BI.TIF : the radiometric indices derived from the VHRS (step 5.3).
-  ### folder "HR_Sentinel2" : data regarding the HRS Sentinel 2 satellite images  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
-    ## HR_Sentinel2/raw_data : the input Sentinel 2 data (as downloaded by the WF in the Copernicus Scihub) (step 2.1). 
-    ## HR_Sentinel2/processed_data : a set of files derived from the Sentinel 2 dataset(s), output of the workflow 
-      # B01.TIF, BO2.TIF, etc... B12.TIF : bands of the Sentinel 2 images cut following the ROI. If multiple images are provided as input (i.e. if the ROI is covered by multiple tiles), the images will be mosaiced first (step 4.2 and 5.5) ;
-      # BRI.TIF, MNDVI.TIF, MNDWI.TIF, NDVI.TIF, NDWI.TIF, RNDVI.TIF : the radiometric indices derived from the HRS. Formulas are provided in the workflow, section 5.4 (step 5.4) ;
-  ### folder "Segmentation" : [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
-      # segmentation_vector.gpkg : vector output of the segmentation process (i.e. objects that will further be classified) (step 6) ;
-      # segmentation_dataset_stats.gpkg : segmented datasets with the zonal statistics for each object (step 7.2).
-  ### folder "Ground_truth" : data regarding the ground truth (i.e. training/validation) dataset 
-      # path_to_ground_truth_data : ground truth dataset provided by the user, including the class hierarchical structure ; 
-      # ground_truth_stats.gpkg : ground truth dataset with the zonal statistics for each object (step 7.1)
-  ### folder "Classification" : data regarding the classification [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]  ########## A FINIR 
-      # classes_hierarchy.png : a figure of the class hierarchical structure (step 8.2) ; 
-      # flat_classif_stats_xxx.png : a figure with the confusion matrix + plot of variable importance at the class hierarchical level xxx, using a flat classification approach  (step 8.1)
-      # hierar_classif_stats_xx.png : a figure with the confusion matrix + plot of variable importance at the class level xxx (step 8.1)
-      # var_importance_yyyy.png : a figure showing the variables importance at each classification level, sorted by yyy {variable source, variable stat type, variable type}
-      # classification.gpkg : Vector with the objects classified + the zonal stats (step 9.2)
-      # classification.tif : Raster version of the classification (step 9.2)
-      # classification_group.gpkg : Vector with adjacent objects having the same class grouped (step 9.2)
+### folder "DEM_SRTM" : data regarding the SRTM Digital Elevation Model [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+## DEM_SRTM/raw_data : SRTM tile(s) covering the ROI (step 1)
+## DEM_SRTM/processed_data : a set of files derived from the DEM, output of the workflow :
+# - DEM.tif : SRTM DEM cut following the ROI and re-projected in the proj_srs (step 4) ;
+# - slope.tif : slope dataset derived from the DEM (step 5.1) ;
+# - aspect.tif : aspect dataset derived from the DEM (step 5.1);
+# - accumulation.tif : flow accumulation dataset derived from the DEM (step 5.1);
+# - direction.tif : flow direction dataset derived from the DEM (step 5.1);
+# - tci.tif : topographic convergence index derived from the DEM (note : not used in further analysis) (step 5.1);
+# - accumulation_treshold.tif : raster with two values : 0 if the flow accumulation is above the threshold_accumulation_raster , 1 if it is under. This information is used for the calculation of the distance from the objects to the flow accumulation network (used as primitive in the classification). (step 5.1) ;
+# - accumulation_treshold_vector.gpkg : vector version of accumulation_treshold.tif (step 5.1) ;
+### folder "VHR_SPOT6" : data regarding the VHRS Spot 6/7 satellite images
+## VHR_SPOT6/raw_data : the input Spot 6/7 data (as provided by the CNES). Must be provided by the user before execution of the workflow. There must be 1 sub-folder by image covering the ROI. Each sub-folder contains the two .tar.gz files as provided by the CNES : one for the panchromatic image and one for the multispectral image [PROVIDED BY THE USER]
+## VHR_SPOT6/processed_data : a set of files derived from the Spot 6/7 datasets, output of the workflow:  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+# - PAN.TIF : the panchromatic image, mosaiced, orthorectified and cut following the ROI (step 3.x) ;
+# - PANSHARPEN.TIF : the multispectral image pansharpened using the panshromatic image, orthorectified and cut following the ROI (step 3.x) ;
+# - PANSHARPEN_0.TIF, PANSHARPEN_1.TIF, PANSHARPEN_2.TIF, PANSHARPEN_3.TIF : respectively the blue, green, red and nir bands of the VHRS (step 3.x) ;
+# - HaralickTextures_xxxx.TIF : the set of textures generated using from the panchromatic image, at various moving windows sizes (step 5.2) ;
+# - NDVI.TIF, NDWI.TIF, BI.TIF : the radiometric indices derived from the VHRS (step 5.3).
+### folder "HR_Sentinel2" : data regarding the HRS Sentinel 2 satellite images  [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+## HR_Sentinel2/raw_data : the input Sentinel 2 data (as downloaded by the WF in the Copernicus Scihub) (step 2.1). 
+## HR_Sentinel2/processed_data : a set of files derived from the Sentinel 2 dataset(s), output of the workflow 
+# B01.TIF, BO2.TIF, etc... B12.TIF : bands of the Sentinel 2 images cut following the ROI. If multiple images are provided as input (i.e. if the ROI is covered by multiple tiles), the images will be mosaiced first (step 4.2 and 5.5) ;
+# BRI.TIF, MNDVI.TIF, MNDWI.TIF, NDVI.TIF, NDWI.TIF, RNDVI.TIF : the radiometric indices derived from the HRS. Formulas are provided in the workflow, section 5.4 (step 5.4) ;
+### folder "Segmentation" : [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]
+# segmentation_vector.gpkg : vector output of the segmentation process (i.e. objects that will further be classified) (step 6) ;
+# segmentation_dataset_stats.gpkg : segmented datasets with the zonal statistics for each object (step 7.2).
+### folder "Ground_truth" : data regarding the ground truth (i.e. training/validation) dataset 
+# path_to_ground_truth_data : ground truth dataset provided by the user, including the class hierarchical structure ; 
+# ground_truth_stats.gpkg : ground truth dataset with the zonal statistics for each object (step 7.1)
+### folder "Classification" : data regarding the classification [GENERATED BY THE WF AS WELL AS ALL SUB-FOLDER AND FILES]  ########## A FINIR 
+# classes_hierarchy.png : a figure of the class hierarchical structure (step 8.2) ; 
+# flat_classif_stats_xxx.png : a figure with the confusion matrix + plot of variable importance at the class hierarchical level xxx, using a flat classification approach  (step 8.1)
+# hierar_classif_stats_xx.png : a figure with the confusion matrix + plot of variable importance at the class level xxx (step 8.1)
+# var_importance_yyyy.png : a figure showing the variables importance at each classification level, sorted by yyy {variable source, variable stat type, variable type}
+# classification.gpkg : Vector with the objects classified + the zonal stats (step 9.2)
+# classification.tif : Raster version of the classification (step 9.2)
+# classification_group.gpkg : Vector with adjacent objects having the same class grouped (step 9.2)
 
 #### Start Workflow
 ########################################################################################################################
@@ -203,7 +203,7 @@ indices_for_classif_labels<-c("DEM",
                               "MNDWI_S2",
                               "MNDVI_S2",
                               "RNDVI_S2"
-                              ) # parameter indices_for_classif_paths sets the path to each variable
+) # parameter indices_for_classif_paths sets the path to each variable
 indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/processed_data/DEM_depressionless.tif"),
                              file.path(path_to_processing_folder,"DEM_SRTM/processed_data/slope.tif"),
                              file.path(path_to_processing_folder,"DEM_SRTM/processed_data/accumulation.tif"),
@@ -251,7 +251,7 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
                              file.path(path_to_processing_folder,"HR_Sentinel2/processed_data/RNDVI.tif")
                              
 )
-                             
+
 ### Parameters for step 8
 column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("L1","L2"). Typically L1 is the most aggregated land cover, L2 is a less aggregated classification, etc.>
 
@@ -441,8 +441,8 @@ PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.d
     stop("\nplot.type can be either 'Tile' or 'Bubble'\n")
   }
   if (!is.null(explanatory.variable)){
-  work.data <- input.data[, c(X.data, Y.data, imp.data, explanatory.variable)]
-  colnames(work.data) <- c("X.var", "Y.var", "imp.var", "type")
+    work.data <- input.data[, c(X.data, Y.data, imp.data, explanatory.variable)]
+    colnames(work.data) <- c("X.var", "Y.var", "imp.var", "type")
   } else {
     work.data <- input.data[, c(X.data, Y.data, imp.data)]
     colnames(work.data) <- c("X.var", "Y.var", "imp.var")
@@ -458,14 +458,14 @@ PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.d
   work.data$X.var <- suppressWarnings(as.factor(as.character(work.data$X.var)))
   work.data$Y.var <- suppressWarnings(as.factor(as.character(work.data$Y.var)))
   if (!is.null(explanatory.variable)){
-  work.data$type <- suppressWarnings(as.factor(as.character(work.data$type)))
-  work.data=work.data[order(work.data$type),]
+    work.data$type <- suppressWarnings(as.factor(as.character(work.data$type)))
+    work.data=work.data[order(work.data$type),]
   }
   if (plot.type == "Tile") {
     p <- ggplot(work.data, aes(X.var, Y.var), environment = localenv)
     if (!is.null(explanatory.variable)){
-    p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col, size=0.3) + facet_grid(type~.,scales="free_y",space="free_y")
-    p <- p + labs(y="var. used",title = paste0("Mean decrease in accuracy of each explanatory variable in each local classifier by ",names(input.data[explanatory.variable]))) 
+      p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col, size=0.3) + facet_grid(type~.,scales="free_y",space="free_y")
+      p <- p + labs(y="var. used",title = paste0("Mean decrease in accuracy of each explanatory variable in each local classifier by ",names(input.data[explanatory.variable]))) 
     } else {
       p <- p + geom_tile(aes(fill = work.data$imp.var), color = geom.tile.bor.col)
       p <- p + labs(y="var. used",title = paste0("Variables importance by classifier")) 
@@ -492,9 +492,9 @@ PlotImportanceHie_v_taconet<-function (input.data, X.data = 2, Y.data = 3, imp.d
     #                     Negative = neg.col)
     p <- ggplot(work.data, aes(X.var, Y.var), environment = localenv)
     if (!is.null(explanatory.variable)){
-    p <- p + geom_point(aes(size = abs(work.data$imp.var), 
-                            fill = work.data[,4]), shape = 21) + facet_grid(type~.,scales="free_y",space="free_y")
-    p <- p + labs(y="var. used",fill = names(input.data[explanatory.variable]),title = paste0("Mean decrease in accuracy of each explanatory variable in each local classifier by ",names(input.data[explanatory.variable]))) 
+      p <- p + geom_point(aes(size = abs(work.data$imp.var), 
+                              fill = work.data[,4]), shape = 21) + facet_grid(type~.,scales="free_y",space="free_y")
+      p <- p + labs(y="var. used",fill = names(input.data[explanatory.variable]),title = paste0("Mean decrease in accuracy of each explanatory variable in each local classifier by ",names(input.data[explanatory.variable]))) 
     } else {
       p <- p + geom_point(aes(size = abs(work.data$imp.var), 
                               fill = work.data[,4]), shape = 21)
@@ -696,7 +696,7 @@ for (i in 1:length(products_to_preprocess)){
   # Unzip both MS and PAN data
   products_to_unzip=list.files(products_to_preprocess[i],full.names = T)
   for (j in 1:length(products_to_unzip)){
-  untar(products_to_unzip[j],exdir=products_to_preprocess[i])
+    untar(products_to_unzip[j],exdir=products_to_preprocess[i])
   }
   # Identifiy MS and PAN folders
   MS_folder=dir(products_to_preprocess[i],pattern = "MS",full.names = T)
@@ -772,13 +772,13 @@ for (i in 1:length(products_to_preprocess)){
   
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_BundleToPerfectSensor")," -inp ",PAN_roi_path," -inxs ",MS_roi_path," -out ",PANSHARPEN_roi_path," uint16")
   system(otb_appli)
-
+  
   ### Remove temporary files and folders
   file.remove(setdiff(list.files(spot67_preprocessing_output_folder_path,full.names = T),c(PAN_roi_path,PANSHARPEN_roi_path,gsub(".TIF",".geom",PAN_roi_path),gsub(".TIF",".geom",PANSHARPEN_roi_path))))
   folder_to_remove=list.files(products_to_preprocess[i],full.names = T)[!grepl('.tar', list.files(products_to_preprocess[i],full.names = T))]
   for (i in 1:length(folder_to_remove)){
     system(paste0("rm -r ", folder_to_remove[i]))  
-    }
+  }
 }
 
 ##############################################################
@@ -828,9 +828,9 @@ products_to_preprocess<-list.files(path_to_dem_raw_folder,pattern = ".hgt",full.
 # If there are multiple tiles, mosaic them and then extract the ROI, else only extract the ROI
 if(length(products_to_preprocess)>1){
   res<-mosaic_and_extract_roi(products_to_preprocess,dem_output_path_file,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
-  } else {
+} else {
   res<-extract_roi(products_to_preprocess,dem_output_path_file,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
-  }
+}
 cat(res)
 
 # Convert from EPSG 4326 (default SRTM EPSG) to UTM EPSG
@@ -855,20 +855,20 @@ for (i in 1:length(products_to_preprocess)){
 
 # If there are multiple products, mosaic them and then extract the ROI, else only extract the ROI
 patterns=c("B01.jp2","B02.jp2","B03.jp2","B04.jp2","B05.jp2","B06.jp2","B07.jp2","B08.jp2","B8A.jp2","B09.jp2","B10.jp2","B11.jp2","B12.jp2")
-  
+
 for (i in 1:length(patterns)){
   paths_images_to_mosaic=list.files(path_to_sentinel2_preprocessed_folder,pattern = patterns[i],full.names = T,recursive = T)
   path_to_output_mosaiced_image=file.path(path_to_sentinel2_preprocessed_folder,gsub(".jp2",".TIF",patterns[i]))
   
   if(length(products_to_preprocess)>1){
-  res<-mosaic_and_extract_roi(paths_images_to_mosaic,path_to_output_mosaiced_image,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
+    res<-mosaic_and_extract_roi(paths_images_to_mosaic,path_to_output_mosaiced_image,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
   } else {
-  res<-extract_roi(paths_images_to_mosaic,path_to_output_mosaiced_image,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
+    res<-extract_roi(paths_images_to_mosaic,path_to_output_mosaiced_image,path_to_roi_vector,path_to_otbApplications_folder,path_to_dem_raw_folder)
   }
   cat(res)
-   
-}
   
+}
+
 ########################################################################################################################
 ########################################################################################################################
 ############ Step 5 - Preparing the ancillary data for the classification ############
@@ -930,9 +930,9 @@ file.remove(output_path)
 rasters_to_disaggregate<-c(dem_depressionless_output_path,slope_output_path,aspect_output_path,accumulation_output_path,twi_output_path)
 cat("Disaggregating the resolutions of the rasters")
 for (i in 1:length(rasters_to_disaggregate)){
-rast<-raster(rasters_to_disaggregate[i])
-rast<-disaggregate(rast,fact=3)
-writeRaster(rast,rasters_to_disaggregate[i],overwrite=TRUE)
+  rast<-raster(rasters_to_disaggregate[i])
+  rast<-disaggregate(rast,fact=3)
+  writeRaster(rast,rasters_to_disaggregate[i],overwrite=TRUE)
 }
 
 # To read and plot the output raster 
@@ -958,43 +958,43 @@ for (i in 1:length(xrad)){
   cat(paste0("Computing simple texture indices for radius = ",xrad[i]))
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture simple -out ",path_to_simple_texture)
   system(otb_appli)
-
+  
   ## Split the textures into n bands (1 / texture)
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_simple_texture," -out ",path_to_simple_texture)
   system(otb_appli)
-
+  
   ## Remove useless textures (textures that we will not use for the classification)
   # We keep : energy (HaralickTextures_simple_0), entropy (HaralickTextures_simple_1), correlation (HaralickTextures_simple_2), inertia (HaralickTextures_simple_4 - distinction sols nu / bati), Haralick correlation (HaralickTextures_simple_7)
   file.remove(c(path_to_simple_texture,
-          gsub(".TIF","_3.TIF",path_to_simple_texture),
-          gsub(".TIF","_5.TIF",path_to_simple_texture),
-          gsub(".TIF","_6.TIF",path_to_simple_texture)
-          ))
-
+                gsub(".TIF","_3.TIF",path_to_simple_texture),
+                gsub(".TIF","_5.TIF",path_to_simple_texture),
+                gsub(".TIF","_6.TIF",path_to_simple_texture)
+  ))
+  
   ## Compute advanced textures
   # Using the application available in the official release (does not enable to select the set of textures)
   cat(paste0("Computing advanced texture indices for radius = ",xrad[i]))
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_HaralickTextureExtraction")," -in ",path_to_spot67_preprocessed_pan," -parameters.xrad ",xrad[i]," -parameters.yrad ",yrad[i]," -parameters.nbbin ",nbbin," -parameters.min ",min," -parameters.max ",max," -texture advanced -out ",path_to_advanced_texture)
   system(otb_appli)
-
+  
   ## Split the textures into n bands (1 / texture)
   otb_appli<-paste0(file.path(path_to_otbApplications_folder,"otbcli_SplitImage")," -in ",path_to_advanced_texture," -out ",path_to_advanced_texture)
   system(otb_appli)
-
+  
   ## Remove useless textures (textures that we will not use for the classification)
   # We keep : mean (HaralickTextures_advanced_0)
   file.remove(c(path_to_advanced_texture,
-              gsub(".TIF","_1.TIF",path_to_advanced_texture),
-              gsub(".TIF","_2.TIF",path_to_advanced_texture),
-              gsub(".TIF","_3.TIF",path_to_advanced_texture),
-              gsub(".TIF","_4.TIF",path_to_advanced_texture),
-              gsub(".TIF","_5.TIF",path_to_advanced_texture),
-              gsub(".TIF","_6.TIF",path_to_advanced_texture),
-              gsub(".TIF","_7.TIF",path_to_advanced_texture),
-              gsub(".TIF","_8.TIF",path_to_advanced_texture),
-              gsub(".TIF","_9.TIF",path_to_advanced_texture)
+                gsub(".TIF","_1.TIF",path_to_advanced_texture),
+                gsub(".TIF","_2.TIF",path_to_advanced_texture),
+                gsub(".TIF","_3.TIF",path_to_advanced_texture),
+                gsub(".TIF","_4.TIF",path_to_advanced_texture),
+                gsub(".TIF","_5.TIF",path_to_advanced_texture),
+                gsub(".TIF","_6.TIF",path_to_advanced_texture),
+                gsub(".TIF","_7.TIF",path_to_advanced_texture),
+                gsub(".TIF","_8.TIF",path_to_advanced_texture),
+                gsub(".TIF","_9.TIF",path_to_advanced_texture)
   ))
-
+  
 }
 
 # Using the application available in the personal release (enables to select the set of textures)
@@ -1122,108 +1122,108 @@ for (i in 1:length(indices_for_classif_paths)){
 
 ### Function to compute the zonal statistics. It will be used to compute the zonal statistics of the ground truth dataset + the segmented objects
 function_compute_zonal_statistics<-function(path_to_input_gpkg_file,path_to_output_gpkg_file,indices_for_classif_paths,indices_for_classif_labels){
-
-# First create an shp version of the geopackage datasets (ground truth and segmentation) since SAGA does not deal with geopackages
-path_to_stats_shp<-gsub(".gpkg",".shp",path_to_output_gpkg_file)
-system(paste0("ogr2ogr ",path_to_stats_shp," ",path_to_input_gpkg_file))
-
-
-# Compute zonal statistics using the Saga Grid Statistics for Polygons function
-# to see the function parameters : rsaga.get.usage('shapes_grid', 2) 
-for (i in 1:length(indices_for_classif_paths)){
-rsaga.geoprocessor('shapes_grid', module = 2, env = saga_work_env, param = list(
-  PARALLELIZED = 'true',
-  GRIDS = paste(gsub("TIF|tif","sgrd",indices_for_classif_paths[i]),collapse=';'), # Note that in theory we could integrate multiple raster at the same time, e.g. GRIDS = "/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDWI.sgrd;/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDVI.sgrd". However all the grids must have the same characteristics (extent), which is not our case
-  POLYGONS = path_to_stats_shp,
-  RESULT = path_to_stats_shp,
-  COUNT='false',
-  MIN='false',
-  MAX='false',
-  RANGE='false',
-  SUM='false',
-  MEAN='true',
-  VAR='false',
-  STDDEV='true'))
-}
-
-## Compute shape statistics with Saga: rsaga.get.usage('shapes_polygons', 7) 
-rsaga.geoprocessor('shapes_polygons', module = 7, env = saga_work_env, param = list(SHAPES = path_to_stats_shp))
-
-
-# Open and rename columns (names have been automatically cut since shp does not accept long column names)
-input_data<-sf::st_read(path_to_input_gpkg_file)
-output_stats<-sf::st_read(path_to_stats_shp)
-cols_to_rename<-setdiff(colnames(output_stats),c("geometry","landcover_",colnames(input_data)))
-new_colnames<-NULL
-for (i in 1:length(indices_for_classif_labels)){
-  new_colnames<-c(new_colnames,paste0(indices_for_classif_labels[i],"_avg"))
-  new_colnames<-c(new_colnames,paste0(indices_for_classif_labels[i],"_stddev"))
-}
-
-new_colnames<-c(new_colnames,"shape_area","shape_perimeter","shape_interior_edge_ratio","shape_p_sqrt_a","shape_max_dist","shape_d_over_a","shape_d_sqrt_a","shape_index")
-
-if (length(new_colnames)!=length(cols_to_rename)){
-  cat("error")
-} else {
-  for (i in 1:length(new_colnames)){
-  colnames(output_stats)[which(colnames(output_stats)==cols_to_rename[i])]<-new_colnames[i]
-  }
-}
-
-colnames(output_stats)[which(colnames(output_stats)=="landcover_")]<-"landcover_class"
-
-# Write data as geopackage
-sf::st_write(output_stats,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
-
-
-## Compute shape statistics using reock indexes. It uses a function extracted from https://github.com/gerrymandr/compactr/blob/master/compactness.R
-# Source the functions with : source("https://raw.githubusercontent.com/gerrymandr/compactr/master/compactness.R")
-# We copied them here for offline processing
-
-#' @rdname shape_index
-polsby_popper = function(poly1) {
-  require(sf, quietly = TRUE)
-  require(units, quietly = TRUE)
-  return(drop_units(4 * pi * st_area(poly1) / st_length(st_boundary(poly1))^2))
-}
-#' @rdname shape_index
-schwartzberg = function(poly1) {
-  return(polsby_popper(poly1)^-0.5)
-}
-
-#' @rdname area_compactness
-reock = function(poly1, mbc = NULL) {
-  require(sf, quietly = TRUE)
-  require(units, quietly = TRUE)
-  if (is.null(mbc)) {
-    require(lwgeom, quietly = TRUE)
-    mbc = st_minimum_bounding_circle(st_convex_hull(st_geometry(poly1)))
+  
+  # First create an shp version of the geopackage datasets (ground truth and segmentation) since SAGA does not deal with geopackages
+  path_to_stats_shp<-gsub(".gpkg",".shp",path_to_output_gpkg_file)
+  system(paste0("ogr2ogr ",path_to_stats_shp," ",path_to_input_gpkg_file))
+  
+  
+  # Compute zonal statistics using the Saga Grid Statistics for Polygons function
+  # to see the function parameters : rsaga.get.usage('shapes_grid', 2) 
+  for (i in 1:length(indices_for_classif_paths)){
+    rsaga.geoprocessor('shapes_grid', module = 2, env = saga_work_env, param = list(
+      PARALLELIZED = 'true',
+      GRIDS = paste(gsub("TIF|tif","sgrd",indices_for_classif_paths[i]),collapse=';'), # Note that in theory we could integrate multiple raster at the same time, e.g. GRIDS = "/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDWI.sgrd;/home/ptaconet/Documents/react/data_BF/VHR_SPOT6/processed_data/NDVI.sgrd". However all the grids must have the same characteristics (extent), which is not our case
+      POLYGONS = path_to_stats_shp,
+      RESULT = path_to_stats_shp,
+      COUNT='false',
+      MIN='false',
+      MAX='false',
+      RANGE='false',
+      SUM='false',
+      MEAN='true',
+      VAR='false',
+      STDDEV='true'))
   }
   
-  return(drop_units(st_area(poly1) / st_area(mbc)))
-}
-
-poly<-sf::st_read(path_to_output_gpkg_file)
-#poly$shape_schwartzberg<-schwartzberg(poly) # equal to shape_index of Saga shapes_polygons index
-poly$shape_reock<-reock(poly)
-sf::st_write(poly,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
-
-## Compute distance statistics (distance to hydrographic network using the accumulation dataset derived from the DEM)
-execGRASS("v.in.ogr", flags=c("o","overwrite"), parameters=list(input=path_to_output_accumulation_threshold, output="accumulation",min_area=0.0001, snap=-1.0))
-execGRASS("v.in.ogr", flags=c("o","overwrite"), parameters=list(input=path_to_output_gpkg_file, output="ground_truth",min_area=0.0001, snap=-1.0))
-execGRASS("v.db.addcolumn", parameters=list(map="ground_truth", columns="dist_to_hydro double"))
-execGRASS("v.distance", flags=c("overwrite"), parameters=list(from="ground_truth", from_type="point,line,area", to="accumulation",to_type="point,line,area",dmax=-1,dmin=-1,upload="dist",column="dist_to_hydro",output="gt_stats_updated"))
-
-# Save file as geopackage
-writeOGR(readVECT("ground_truth"),path_to_output_gpkg_file,driver = "GPKG",layer="ground_truth_stats",overwrite_layer = TRUE)
-#write.csv(as.data.frame(readVECT("ground_truth")),gsub(".gpkg",".csv",path_to_output_gpkg_file))
-
-if (file.exists(path_to_output_gpkg_file)){
-  return("Done")
-} else {
-  return("Error")
-}
-
+  ## Compute shape statistics with Saga: rsaga.get.usage('shapes_polygons', 7) 
+  rsaga.geoprocessor('shapes_polygons', module = 7, env = saga_work_env, param = list(SHAPES = path_to_stats_shp))
+  
+  
+  # Open and rename columns (names have been automatically cut since shp does not accept long column names)
+  input_data<-sf::st_read(path_to_input_gpkg_file)
+  output_stats<-sf::st_read(path_to_stats_shp)
+  cols_to_rename<-setdiff(colnames(output_stats),c("geometry","landcover_",colnames(input_data)))
+  new_colnames<-NULL
+  for (i in 1:length(indices_for_classif_labels)){
+    new_colnames<-c(new_colnames,paste0(indices_for_classif_labels[i],"_avg"))
+    new_colnames<-c(new_colnames,paste0(indices_for_classif_labels[i],"_stddev"))
+  }
+  
+  new_colnames<-c(new_colnames,"shape_area","shape_perimeter","shape_interior_edge_ratio","shape_p_sqrt_a","shape_max_dist","shape_d_over_a","shape_d_sqrt_a","shape_index")
+  
+  if (length(new_colnames)!=length(cols_to_rename)){
+    cat("error")
+  } else {
+    for (i in 1:length(new_colnames)){
+      colnames(output_stats)[which(colnames(output_stats)==cols_to_rename[i])]<-new_colnames[i]
+    }
+  }
+  
+  colnames(output_stats)[which(colnames(output_stats)=="landcover_")]<-"landcover_class"
+  
+  # Write data as geopackage
+  sf::st_write(output_stats,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
+  
+  
+  ## Compute shape statistics using reock indexes. It uses a function extracted from https://github.com/gerrymandr/compactr/blob/master/compactness.R
+  # Source the functions with : source("https://raw.githubusercontent.com/gerrymandr/compactr/master/compactness.R")
+  # We copied them here for offline processing
+  
+  #' @rdname shape_index
+  polsby_popper = function(poly1) {
+    require(sf, quietly = TRUE)
+    require(units, quietly = TRUE)
+    return(drop_units(4 * pi * st_area(poly1) / st_length(st_boundary(poly1))^2))
+  }
+  #' @rdname shape_index
+  schwartzberg = function(poly1) {
+    return(polsby_popper(poly1)^-0.5)
+  }
+  
+  #' @rdname area_compactness
+  reock = function(poly1, mbc = NULL) {
+    require(sf, quietly = TRUE)
+    require(units, quietly = TRUE)
+    if (is.null(mbc)) {
+      require(lwgeom, quietly = TRUE)
+      mbc = st_minimum_bounding_circle(st_convex_hull(st_geometry(poly1)))
+    }
+    
+    return(drop_units(st_area(poly1) / st_area(mbc)))
+  }
+  
+  poly<-sf::st_read(path_to_output_gpkg_file)
+  #poly$shape_schwartzberg<-schwartzberg(poly) # equal to shape_index of Saga shapes_polygons index
+  poly$shape_reock<-reock(poly)
+  sf::st_write(poly,path_to_output_gpkg_file,layer_options = "OVERWRITE=true")
+  
+  ## Compute distance statistics (distance to hydrographic network using the accumulation dataset derived from the DEM)
+  execGRASS("v.in.ogr", flags=c("o","overwrite"), parameters=list(input=path_to_output_accumulation_threshold, output="accumulation",min_area=0.0001, snap=-1.0))
+  execGRASS("v.in.ogr", flags=c("o","overwrite"), parameters=list(input=path_to_output_gpkg_file, output="ground_truth",min_area=0.0001, snap=-1.0))
+  execGRASS("v.db.addcolumn", parameters=list(map="ground_truth", columns="dist_to_hydro double"))
+  execGRASS("v.distance", flags=c("overwrite"), parameters=list(from="ground_truth", from_type="point,line,area", to="accumulation",to_type="point,line,area",dmax=-1,dmin=-1,upload="dist",column="dist_to_hydro",output="gt_stats_updated"))
+  
+  # Save file as geopackage
+  writeOGR(readVECT("ground_truth"),path_to_output_gpkg_file,driver = "GPKG",layer="ground_truth_stats",overwrite_layer = TRUE)
+  #write.csv(as.data.frame(readVECT("ground_truth")),gsub(".gpkg",".csv",path_to_output_gpkg_file))
+  
+  if (file.exists(path_to_output_gpkg_file)){
+    return("Done")
+  } else {
+    return("Error")
+  }
+  
 }
 
 ##############################################################
@@ -1330,8 +1330,8 @@ ground_truth_df_flat_model<-cbind(df_fill_missing_class_values,ground_truth_df_m
 ##############################################################
 
 ## Iterate on each class hierarchical level to produce for each classification level :
-  # - a) a figure with the confusion matrix + the variable importance dotchart when using a flat classification
-  # - b) a figure comparing the overall classification performance (Kappa, Accuracy, etc) when using a flat vs. a hierarchical classification
+# - a) a figure with the confusion matrix + the variable importance dotchart when using a flat classification
+# - b) a figure comparing the overall classification performance (Kappa, Accuracy, etc) when using a flat vs. a hierarchical classification
 
 classification_perf_flat_vs_hie<-NULL
 
@@ -1362,9 +1362,9 @@ for (i in 1:length(column_names_lc_classes_hierarchy)){
   classif_stats_by_class_flat<-conf$byClass
   classif_stats_by_class_flat<-as.data.frame(classif_stats_by_class_flat)
   if (ncol(classif_stats_by_class_flat)>1){
-  classif_stats_by_class_flat$class<-sub('.*\\: ', '', row.names(classif_stats_by_class_flat))
-  classif_stats_by_class_flat_f1<-classif_stats_by_class_flat[,c("class","F1")]
-  classif_stats_by_class_flat_f1$classif_method<-"flat"
+    classif_stats_by_class_flat$class<-sub('.*\\: ', '', row.names(classif_stats_by_class_flat))
+    classif_stats_by_class_flat_f1<-classif_stats_by_class_flat[,c("class","F1")]
+    classif_stats_by_class_flat_f1$classif_method<-"flat"
   }
   
   # Get variable importance
@@ -1387,100 +1387,100 @@ for (i in 1:length(column_names_lc_classes_hierarchy)){
   
   ## Run RF hierarchical classif
   if (i>1){   # Works only if there is more than one hierarchy level
-### Setup the classifiers at each hierarchical level.
-column_names_lc_classes_hierarchy_classif<-column_names_lc_classes_hierarchy[1:which(column_names_lc_classes_hierarchy==column_names_lc_classes_hierarchy[i])]
-ground_truth_df_hierarch_model_this_c<-ground_truth_df_hie_model[,c("cat",column_names_lc_classes_hierarchy_classif,column_names_primitives)]
-
-if ("END.PATH" %in% unique(ground_truth_df_hierarch_model_this_c[,column_names_lc_classes_hierarchy[i]])) {
-  internal.end.path = TRUE
-} else {
-  internal.end.path = FALSE
-}
-
-
-#Info on the function : help(RunHRF)
-hie.RF <- HieRanFor::RunHRF(train.data = ground_truth_df_hierarch_model_this_c,
-                            case.ID = "cat",
-                            exp.var = column_names_primitives,
-                            hie.levels = column_names_lc_classes_hierarchy_classif,
-                            mtry = "tuneRF2",
-                            internal.end.path = internal.end.path)
-
-
-## Important note: The source PerformanceHRF and PerformanceFlatRF functions in the HieRanFor package havz a bug. To fix them, 
-## if you run the script online do the following (done in the : 
-# path_to_PerformanceHRF_modif<-file.path(path_to_processing_folder,"PerformanceHRF_modif.R")
-# download.file("https://raw.githubusercontent.com/ptaconet/r_react/master/functions/PerformanceHRF_modif.R",path_to_PerformanceHRF_modif)
-# insertSource(path_to_PerformanceHRF_modif, package = "HieRanFor")
-# file.remove(path_to_PerformanceHRF_modif)
-## If you run the script offline do the following : 
-# run: fix("PerformanceHRF")
-# replace the following line : nodes.acc.ind <- c("Sensitivity", "Specificity", "Pos Pred Value", "Neg Pred Value", "Prevalence", "Detection Rate", "Detection Prevalence", "Balanced Accuracy")
-# by :                         nodes.acc.ind <- c("Sensitivity", "Specificity","Precision", "Recall", "F1", "Pos Pred Value", "Neg Pred Value", "Prevalence", "Detection Rate", "Detection Prevalence", "Balanced Accuracy")
-# Same for PerformanceFlatRF
-# This trick must be done each time the script is sourced, i.e. each time the workspace is cleaned... (since no trick has been found -for now- to permanently save these changes )
-# help(PerformanceHRF) for additional info on the function
-perf.hRF <- PerformanceHRF (hie.RF = hie.RF,
-                            per.index = c("flat.measures","hie.F.measure") , # Available options are:  c("flat.measures") ; c("hie.F.measure")
-                            crisp.rule  =  c("stepwise.majority",  # Available options are:  c("stepwise.majority") ; c("multiplicative.majority") ; c("multiplicative.permutation")
-                                             "multiplicative.majority"),
-                            perm.num    = 10,
-                            div.print   = 2  
-)
-
-crisp.case.class <- perf.hRF$crisp.case.class
-hie.performance <- perf.hRF$hie.performance
-
-
-
-## Compare flat and hierarchical classification performance measures
-
-# Merge flat and hierarchical classification indicators
-hie.performance<-as.data.frame(t(hie.performance),stringsAsFactors = F)
-colnames(hie.performance)<-c("hier_stepwise_majority","hier_multiplicative_majority")
-hie.performance<-hie.performance[2:nrow(hie.performance),]
-hie.performance$hier_stepwise_majority<-as.numeric(hie.performance$hier_stepwise_majority)
-hie.performance$hier_multiplicative_majority<-as.numeric(hie.performance$hier_multiplicative_majority)
-hie.performance$variable=rownames(hie.performance)
-
-hie.performance$class<-gsub(";.*$", '', hie.performance$variable)
-hie.performance$perf_indic<-sub('.*\\;', '', hie.performance$variable)
-
-hie.performance.f1<-hie.performance %>% filter(perf_indic=="F1")
-hie.performance.f1$variable<- hie.performance.f1$perf_indic<- NULL
-hie.performance.f1<-melt(hie.performance.f1,"class")
-colnames(hie.performance.f1)<-c("class","classif_method","F1")
-
-f1_scores_this_level<-rbind(classif_stats_by_class_flat_f1,hie.performance.f1)
-
-## Compaare flat and hierarchical classifs
-# f1 scores by class
-png(file.path(path_to_classification_folder,paste0("f1_scores_",column_names_lc_classes_hierarchy[i],".png")),width = 1000, height = 1000, units = "px" )
-print(ggplot(f1_scores_this_level, aes(fill=classif_method, y=F1, x=reorder(class,-F1))) + 
-  geom_bar(position="dodge", stat="identity") +
-  labs(x = "Class", title = paste0("F1 scores by class and by classification method for ",column_names_lc_classes_hierarchy[i])) +
-  theme(axis.text.x = element_text(angle = 60, hjust = 1)))
-dev.off()
-
-# Global classification performance indicatorrs (kappa, etc.)
-classification_perf_flat_vs_hie_this_level<-merge(classif_overall_stats_flat,hie.performance,by="variable")
-colnames(classification_perf_flat_vs_hie_this_level)[which(colnames(classification_perf_flat_vs_hie_this_level)=="value")]="flat"
-classification_perf_flat_vs_hie_this_level<-melt(classification_perf_flat_vs_hie_this_level)
-colnames(classification_perf_flat_vs_hie_this_level)[1]<-"perf_indicator"
-colnames(classification_perf_flat_vs_hie_this_level)[2]<-"classif_method"
-classification_perf_flat_vs_hie_this_level$classif_level<-column_names_lc_classes_hierarchy[i]
-classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="flat"] <- "red"
-classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="hier_stepwise_majority"]  <- "blue"
-classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="hier_multiplicative_majority"]  <- "forestgreen"
-
-#png(file.path(path_to_classification_folder,paste0("classification_perf_flat_vs_hie_",column_names_lc_classes_hierarchy[i],".png")),width = 1000, height = 1000, units = "px" )
-#dotchart(classification_perf_flat_vs_hie_this_level$value,labels=classification_perf_flat_vs_hie_this_level[,2],cex=1.4,pch = 21,groups= classification_perf_flat_vs_hie_this_level[,1],main=paste0("Classification performance measures by type of classification\n at level : ",column_names_lc_classes_hierarchy[i]),xlab="Measure value", col = classification_perf_flat_vs_hie_this_level$color,xlim = c(0,1)) 
-#dev.off()
-
-classification_perf_flat_vs_hie<-rbind(classification_perf_flat_vs_hie,classification_perf_flat_vs_hie_this_level)
-
+    ### Setup the classifiers at each hierarchical level.
+    column_names_lc_classes_hierarchy_classif<-column_names_lc_classes_hierarchy[1:which(column_names_lc_classes_hierarchy==column_names_lc_classes_hierarchy[i])]
+    ground_truth_df_hierarch_model_this_c<-ground_truth_df_hie_model[,c("cat",column_names_lc_classes_hierarchy_classif,column_names_primitives)]
+    
+    if ("END.PATH" %in% unique(ground_truth_df_hierarch_model_this_c[,column_names_lc_classes_hierarchy[i]])) {
+      internal.end.path = TRUE
+    } else {
+      internal.end.path = FALSE
+    }
+    
+    
+    #Info on the function : help(RunHRF)
+    hie.RF <- HieRanFor::RunHRF(train.data = ground_truth_df_hierarch_model_this_c,
+                                case.ID = "cat",
+                                exp.var = column_names_primitives,
+                                hie.levels = column_names_lc_classes_hierarchy_classif,
+                                mtry = "tuneRF2",
+                                internal.end.path = internal.end.path)
+    
+    
+    ## Important note: The source PerformanceHRF and PerformanceFlatRF functions in the HieRanFor package havz a bug. To fix them, 
+    ## if you run the script online do the following (done in the : 
+    # path_to_PerformanceHRF_modif<-file.path(path_to_processing_folder,"PerformanceHRF_modif.R")
+    # download.file("https://raw.githubusercontent.com/ptaconet/r_react/master/functions/PerformanceHRF_modif.R",path_to_PerformanceHRF_modif)
+    # insertSource(path_to_PerformanceHRF_modif, package = "HieRanFor")
+    # file.remove(path_to_PerformanceHRF_modif)
+    ## If you run the script offline do the following : 
+    # run: fix("PerformanceHRF")
+    # replace the following line : nodes.acc.ind <- c("Sensitivity", "Specificity", "Pos Pred Value", "Neg Pred Value", "Prevalence", "Detection Rate", "Detection Prevalence", "Balanced Accuracy")
+    # by :                         nodes.acc.ind <- c("Sensitivity", "Specificity","Precision", "Recall", "F1", "Pos Pred Value", "Neg Pred Value", "Prevalence", "Detection Rate", "Detection Prevalence", "Balanced Accuracy")
+    # Same for PerformanceFlatRF
+    # This trick must be done each time the script is sourced, i.e. each time the workspace is cleaned... (since no trick has been found -for now- to permanently save these changes )
+    # help(PerformanceHRF) for additional info on the function
+    perf.hRF <- PerformanceHRF (hie.RF = hie.RF,
+                                per.index = c("flat.measures","hie.F.measure") , # Available options are:  c("flat.measures") ; c("hie.F.measure")
+                                crisp.rule  =  c("stepwise.majority",  # Available options are:  c("stepwise.majority") ; c("multiplicative.majority") ; c("multiplicative.permutation")
+                                                 "multiplicative.majority"),
+                                perm.num    = 10,
+                                div.print   = 2  
+    )
+    
+    crisp.case.class <- perf.hRF$crisp.case.class
+    hie.performance <- perf.hRF$hie.performance
+    
+    
+    
+    ## Compare flat and hierarchical classification performance measures
+    
+    # Merge flat and hierarchical classification indicators
+    hie.performance<-as.data.frame(t(hie.performance),stringsAsFactors = F)
+    colnames(hie.performance)<-c("hier_stepwise_majority","hier_multiplicative_majority")
+    hie.performance<-hie.performance[2:nrow(hie.performance),]
+    hie.performance$hier_stepwise_majority<-as.numeric(hie.performance$hier_stepwise_majority)
+    hie.performance$hier_multiplicative_majority<-as.numeric(hie.performance$hier_multiplicative_majority)
+    hie.performance$variable=rownames(hie.performance)
+    
+    hie.performance$class<-gsub(";.*$", '', hie.performance$variable)
+    hie.performance$perf_indic<-sub('.*\\;', '', hie.performance$variable)
+    
+    hie.performance.f1<-hie.performance %>% filter(perf_indic=="F1")
+    hie.performance.f1$variable<- hie.performance.f1$perf_indic<- NULL
+    hie.performance.f1<-melt(hie.performance.f1,"class")
+    colnames(hie.performance.f1)<-c("class","classif_method","F1")
+    
+    f1_scores_this_level<-rbind(classif_stats_by_class_flat_f1,hie.performance.f1)
+    
+    ## Compaare flat and hierarchical classifs
+    # f1 scores by class
+    png(file.path(path_to_classification_folder,paste0("f1_scores_",column_names_lc_classes_hierarchy[i],".png")),width = 1000, height = 1000, units = "px" )
+    print(ggplot(f1_scores_this_level, aes(fill=classif_method, y=F1, x=reorder(class,-F1))) + 
+            geom_bar(position="dodge", stat="identity") +
+            labs(x = "Class", title = paste0("F1 scores by class and by classification method for ",column_names_lc_classes_hierarchy[i])) +
+            theme(axis.text.x = element_text(angle = 60, hjust = 1)))
+    dev.off()
+    
+    # Global classification performance indicatorrs (kappa, etc.)
+    classification_perf_flat_vs_hie_this_level<-merge(classif_overall_stats_flat,hie.performance,by="variable")
+    colnames(classification_perf_flat_vs_hie_this_level)[which(colnames(classification_perf_flat_vs_hie_this_level)=="value")]="flat"
+    classification_perf_flat_vs_hie_this_level<-melt(classification_perf_flat_vs_hie_this_level)
+    colnames(classification_perf_flat_vs_hie_this_level)[1]<-"perf_indicator"
+    colnames(classification_perf_flat_vs_hie_this_level)[2]<-"classif_method"
+    classification_perf_flat_vs_hie_this_level$classif_level<-column_names_lc_classes_hierarchy[i]
+    classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="flat"] <- "red"
+    classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="hier_stepwise_majority"]  <- "blue"
+    classification_perf_flat_vs_hie_this_level$color[classification_perf_flat_vs_hie_this_level[,2]=="hier_multiplicative_majority"]  <- "forestgreen"
+    
+    #png(file.path(path_to_classification_folder,paste0("classification_perf_flat_vs_hie_",column_names_lc_classes_hierarchy[i],".png")),width = 1000, height = 1000, units = "px" )
+    #dotchart(classification_perf_flat_vs_hie_this_level$value,labels=classification_perf_flat_vs_hie_this_level[,2],cex=1.4,pch = 21,groups= classification_perf_flat_vs_hie_this_level[,1],main=paste0("Classification performance measures by type of classification\n at level : ",column_names_lc_classes_hierarchy[i]),xlab="Measure value", col = classification_perf_flat_vs_hie_this_level$color,xlim = c(0,1)) 
+    #dev.off()
+    
+    classification_perf_flat_vs_hie<-rbind(classification_perf_flat_vs_hie,classification_perf_flat_vs_hie_this_level)
+    
   }
-
+  
   
 }
 
@@ -1538,21 +1538,21 @@ Importance.hie.RF$indice<-as.factor(Importance.hie.RF$indice)
 for (i in 5:7){
   for (j in c("Bubble","Tile")){
     png(file.path(path_to_classification_folder,paste0("var_importance_",names(Importance.hie.RF[i]),"_",j,".png")),width = 1000, height = 1000, units = "px" )
-        PlotImportanceHie_v_taconet(input.data = Importance.hie.RF,
-                                    X.data     = 2,
-                                    Y.data     = 1,
-                                    imp.data   = 4,
-                                    explanatory.variable = i,
-                                    plot.type  = j,
-                                    supp.warn  = FALSE)
+    PlotImportanceHie_v_taconet(input.data = Importance.hie.RF,
+                                X.data     = 2,
+                                Y.data     = 1,
+                                imp.data   = 4,
+                                explanatory.variable = i,
+                                plot.type  = j,
+                                supp.warn  = FALSE)
     dev.off()
   }
 }
- 
+
 
 ### 3) For each local classifier :  
-  # a png with 2 infos : the local confusion matrix and the plot of variable importance 
-  # the confusion matrix
+# a png with 2 infos : the local confusion matrix and the plot of variable importance 
+# the confusion matrix
 for (i in 1:length(hie.RF$all.local.RF)){
   
   # Name of the class
@@ -1560,7 +1560,7 @@ for (i in 1:length(hie.RF$all.local.RF)){
   classifier.ID_this_class<-hie.RF$hier.struc$lRF.info$classifier.ID[i]
   
   conf_matrix<-hie.RF$all.local.RF[[i]]$local.RF$confusion
-
+  
   Importance.hie.RF_this_class<-Importance.hie.RF[which(Importance.hie.RF$classifier.ID==classifier.ID_this_class),]
   colnames(Importance.hie.RF_this_class)[which(colnames(Importance.hie.RF_this_class)=="mean.dec.accu")]<-"MeanDecreaseGini"
   colnames(Importance.hie.RF_this_class)[which(colnames(Importance.hie.RF_this_class)=="expl.var")]<-"column_names_primitives"
@@ -1572,7 +1572,7 @@ for (i in 1:length(hie.RF$all.local.RF)){
                     path_to_output_plot=file.path(path_to_classification_folder,paste0("hierar_classif_stats_",
                                                                                        classifier.ID_this_class,".png")))
   
-
+  
 }
 
 
@@ -1601,23 +1601,23 @@ for (i in 1:length(column_names_lc_classes_hierarchy)){
   ground_truth_df_flat_model_this_class<-ground_truth_df_flat_model[,c(column_names_lc_classes_hierarchy[i],column_names_primitives)]
   colnames(ground_truth_df_flat_model_this_class)[1]<-"response"
   ground_truth_df_flat_model_this_class$response<-as.factor(ground_truth_df_flat_model_this_class$response)
-
+  
   model_tuned<-randomForest::tuneRF(x=ground_truth_df_flat_model_this_class[,2:ncol(ground_truth_df_flat_model_this_class)],y=ground_truth_df_flat_model_this_class$response,trace = FALSE)
   optimum_mtry<-as.numeric(model_tuned[,1][which(model_tuned[,2]==min(model_tuned[,2]))])
   model<-randomForest::randomForest(response ~ ., data=ground_truth_df_flat_model_this_class,mtry=optimum_mtry)
-
+  
   segmentation_df$predicted<-predict(model,segmentation_df)
-
+  
   cat("Saving outputs to the disk")
   res<-save_classif_to_disk_function(dataset_classified = segmentation_df, 
-                                   dataset_to_classify_sf = segmentation_gpkg, 
-                                   path_to_output_classification_data = file.path(path_to_classification_folder,paste0("classification_",column_names_lc_classes_hierarchy[i])), 
-                                   save_objects_vector=FALSE,
-                                   save_objects_raster=TRUE,
-                                   save_objects_vector_group_adj_polygons=FALSE # turn to TRUE when script is OK
-                                    )
-
-
+                                     dataset_to_classify_sf = segmentation_gpkg, 
+                                     path_to_output_classification_data = file.path(path_to_classification_folder,paste0("classification_",column_names_lc_classes_hierarchy[i])), 
+                                     save_objects_vector=FALSE,
+                                     save_objects_raster=TRUE,
+                                     save_objects_vector_group_adj_polygons=FALSE # turn to TRUE when script is OK
+  )
+  
+  
 }
 
 
