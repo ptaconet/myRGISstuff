@@ -118,7 +118,7 @@ rm(list = ls())
 ### Global variables used throughout the WF
 path_to_otbApplications_folder<-"/home/ptaconet/OTB-6.6.1-Linux64/bin"
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
-path_to_processing_folder<-"/home/ptaconet/Documents/react/data_BF"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
+path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_roi_vector="ROI.kml" #<Path to the Region of interest in KML format>
 
 
@@ -156,7 +156,7 @@ segmentation_sw=0.9             #<segmentation spectral parameter>
 
 ### Parameters for step 7
 path_to_groundtruth_folder<-file.path(path_to_processing_folder,"Ground_truth")
-path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"groundtruth_bf_v_classes_update.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
+path_to_ground_truth_data<-file.path(path_to_groundtruth_folder,"civ_groundtruth_objects_segmentation_v_classes_update.gpkg") #file.path(path_to_groundtruth_folder,"groundtruth_bf_v_classes_update.gpkg") #<Path to the ground truth dataset. The geometry column must be named "geom">
 methods_to_compute<-"avg,stddev" #<methods_to_compute for the primitives. Available methods are: "minimum,maximum,range,average,stddev,variance,coeff_var,first_quartile,median,third_quartile,percentile">
 indices_for_classif_labels<-c("DEM",
                               "slope",
@@ -254,6 +254,10 @@ indices_for_classif_paths<-c(file.path(path_to_processing_folder,"DEM_SRTM/proce
 
 ### Parameters for step 8
 column_names_lc_classes_hierarchy<-c("L1","L2","L3","L4","L5") #<Names of the columns of land cover classes in the ground truth dataset. eg : c("L1","L2"). Typically L1 is the most aggregated land cover, L2 is a less aggregated classification, etc.>
+
+### Parameters for step 9
+process_cloudy_areas<-TRUE  # What to do with clouds and cloud shadows in Spot 6 images ? If FALSE will act as there were no clouds, hence, will classify cloud areas wrongly. If TRUE, cloud and cloud shadow data must be available in the training/validation dataset. Cloud will be detected with the RF model and primitives corresponding to the parcels classified as clouds will be set to NA. Then RF will be re-run. Hence the parcels will be classified base on the S2 image only.
+# BF:FALSE ; CIV:TRUE
 
 ########################################################################################################################
 ############ Prepare workflow ############
@@ -869,6 +873,20 @@ for (i in 1:length(patterns)){
   
 }
 
+# Convert to right epsg if necessary
+path_to_output_mosaiced_images<-list.files(path_to_sentinel2_preprocessed_folder,pattern = ".TIF",full.names = TRUE)
+im1<-raster(path_to_output_mosaiced_images[1])
+if (as.character(CRS(projection(im1)))!=as.character(CRS(proj_srs))){
+  for (i in 1:length(path_to_output_mosaiced_images)){
+    gdalUtils::gdalwarp(srcfile=path_to_output_mosaiced_images[i],dstfile=gsub(".TIF","_temp.TIF",path_to_output_mosaiced_images[i]),t_srs=proj_srs,overwrite=TRUE)
+    file.remove(path_to_output_mosaiced_images[i])
+    file.rename(gsub(".TIF","_temp.TIF",path_to_output_mosaiced_images[i]),path_to_output_mosaiced_images[i])
+  }
+}
+
+
+
+
 ########################################################################################################################
 ########################################################################################################################
 ############ Step 5 - Preparing the ancillary data for the classification ############
@@ -1295,8 +1313,8 @@ df_primitives_types_sources$indice<-gsub(pattern,"",df_primitives_types_sources$
 df_primitives_types_sources<-left_join(df_primitives_types_sources,data.frame(indices_for_classif_labels,indices_for_classif_paths,stringsAsFactors = F),by=c("indice"="indices_for_classif_labels"))
 
 # Keep only useful columns in the GT dataset (i.e. hierarchy of columns to classify + primitives + unique identifiers)
-ground_truth_df_model<-ground_truth_df[,c("cat",column_names_lc_classes_hierarchy,column_names_primitives)]
-
+ground_truth_df_model<-ground_truth_df[,c(column_names_lc_classes_hierarchy,column_names_primitives)]
+ground_truth_df_model$cat<-seq(1,nrow(ground_truth_df_model))
 # Fill the NAs in the ground truth dataset using the na.roughfix function. We do it this way since there are only few NAs in our datasets. Note: we could also use the randomForest::rfImpute function
 ground_truth_df_model <- randomForest::na.roughfix(ground_truth_df_model)
 
@@ -1586,17 +1604,17 @@ for (i in 1:length(hie.RF$all.local.RF)){
 #### 9.1 - Classify the objects output of the segmentation using the approach that gives the best results, and save outputs to disk  ####
 ##############################################################
 
-# Open objects segmentation dataset
 segmentation_gpkg<-sf::st_read(path_to_segmented_dataset_stats)
-segmentation_df<-as.data.frame(segmentation_gpkg)
-segmentation_df$geom<-NULL
-segmentation_df$cat=NULL
-# Fill-in NA values with median value of the column (using randomForest::na.roughfix)
-segmentation_df<-randomForest::na.roughfix(segmentation_df)
 
 # Run the model that gives the best results at all the hierarchical levels (here for BF: flat at all the levels)
-
 for (i in 1:length(column_names_lc_classes_hierarchy)){
+  # Open objects segmentation dataset
+  segmentation_df<-as.data.frame(segmentation_gpkg)
+  segmentation_df$geom<-NULL
+  segmentation_df$cat=NULL
+  # Fill-in NA values with median value of the column (using randomForest::na.roughfix)
+  segmentation_df<-randomForest::na.roughfix(segmentation_df)
+  
   cat(paste0("Classifying the objects at level ",column_names_lc_classes_hierarchy[i],"\n"))
   ground_truth_df_flat_model_this_class<-ground_truth_df_flat_model[,c(column_names_lc_classes_hierarchy[i],column_names_primitives)]
   colnames(ground_truth_df_flat_model_this_class)[1]<-"response"
@@ -1608,6 +1626,29 @@ for (i in 1:length(column_names_lc_classes_hierarchy)){
   
   segmentation_df$predicted<-predict(model,segmentation_df)
   
+  if (process_cloudy_areas){
+    # Clouds and cloud shadows. We set to NA the objects classified as cloud and cloud shadows and we run again the classif. Hence the classif will only take the Sentinel data into account to classify the data
+    column_primitives_to_settoNA<-df_primitives_types_sources$column_names_primitives[which(df_primitives_types_sources$type =="VHSR" | df_primitives_types_sources$stat=="absolute")]
+    index_to_settoNA<-which(segmentation_df$predicted %in% c("nuages","ombres_nuages"))
+    for (j in 1:length(column_primitives_to_settoNA)){
+      segmentation_df[index_to_settoNA,column_primitives_to_settoNA[j]]<-NA
+    }
+    segmentation_df$predicted<-NULL
+    segmentation_df<-randomForest::na.roughfix(segmentation_df)
+  
+    ground_truth_df_flat_model_this_class<-ground_truth_df_flat_model[,c(column_names_lc_classes_hierarchy[i],column_names_primitives)]
+    colnames(ground_truth_df_flat_model_this_class)[1]<-"response"
+    ground_truth_df_flat_model_this_class <- ground_truth_df_flat_model_this_class %>% filter(!(response %in% c("nuages","ombres_nuages")))
+    ground_truth_df_flat_model_this_class$response<-as.factor(ground_truth_df_flat_model_this_class$response)
+  
+    model_tuned<-randomForest::tuneRF(x=ground_truth_df_flat_model_this_class[,2:ncol(ground_truth_df_flat_model_this_class)],y=ground_truth_df_flat_model_this_class$response,trace = FALSE)
+    optimum_mtry<-as.numeric(model_tuned[,1][which(model_tuned[,2]==min(model_tuned[,2]))])
+    model<-randomForest::randomForest(response ~ ., data=ground_truth_df_flat_model_this_class,mtry=optimum_mtry)
+  
+    segmentation_df$predicted<-predict(model,segmentation_df)
+  
+  }
+
   cat("Saving outputs to the disk")
   res<-save_classif_to_disk_function(dataset_classified = segmentation_df, 
                                      dataset_to_classify_sf = segmentation_gpkg, 

@@ -13,6 +13,7 @@ path_to_amal_database<-"/home/ptaconet/Documents/react/miscellaneous_data/React_
 path_to_gpkg_database<-"/home/ptaconet/Documents/react/react_db.gpkg"  # Empty gpkg template is available here : http://www.geopackage.org/data/empty.gpkg
 path_to_metadata_table<-"/home/ptaconet/r_react/database/metadata.csv"
 path_to_metadata_mapping_table<-"/home/ptaconet/r_react/database/metadata_mapping.csv"
+upload_lulc_rasters<-TRUE
 
 download.file("http://www.geopackage.org/data/empty.gpkg",path_to_gpkg_database)
 
@@ -107,16 +108,18 @@ st_write(ancillary_africa_cities, path_to_gpkg_database, "ancillary_africa_citie
 ground_truth_data_civ_raw<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_vector_32630.gpkg")
 ground_truth_data_civ_raw <- cbind(pk = 1:nrow(ground_truth_data_civ_raw), ground_truth_data_civ_raw)
 st_write(ground_truth_data_civ_raw, path_to_gpkg_database, "landcover_civ_groundtruth_raw", update = TRUE)
-ground_truth_data_civ_revised<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_objects_segmentation.gpkg")
+ground_truth_data_civ_revised<-st_read("/home/ptaconet/Documents/react/data_CIV/Ground_truth/civ_groundtruth_objects_segmentation_v_classes_update.gpkg")
 st_write(ground_truth_data_civ_revised, path_to_gpkg_database, "landcover_civ_groundtruth_processed", update = TRUE)
 
 ground_truth_data_bf_raw<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/bf_groundtruth_vector_32630.gpkg")
 st_write(ground_truth_data_bf_raw, path_to_gpkg_database, "landcover_bf_groundtruth_raw", update = TRUE)
-ground_truth_data_bf_revised<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/groundtruth_bf.gpkg")
+ground_truth_data_bf_revised<-st_read("/home/ptaconet/Documents/react/data_BF/Ground_truth/groundtruth_bf_v_classes_update.gpkg")
 st_write(ground_truth_data_bf_revised, path_to_gpkg_database, "landcover_bf_groundtruth_processed", update = TRUE)
 
-# LU/LC maps 
-
+## LU/LC maps 
+if (upload_lulc_rasters){
+# BF
+  cat("loading BF LU/LC rasters...\n")
 path_to_LU_L1_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L1.tif"
 path_to_LU_L2_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L2.tif"
 path_to_LU_L3_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L3.tif"
@@ -140,16 +143,53 @@ LU_L3_classes<-read.csv(path_to_LU_L3_classes)
 LU_L4_classes<-read.csv(path_to_LU_L4_classes)
 LU_L5_classes<-read.csv(path_to_LU_L5_classes)
 
-LU_L1_classes$classif_level<-"L1"
-LU_L2_classes$classif_level<-"L2"
-LU_L3_classes$classif_level<-"L3"
-LU_L4_classes$classif_level<-"L4"
-LU_L5_classes$classif_level<-"L5"
+LU_L1_classes$classif_level<-"classification_L1"
+LU_L2_classes$classif_level<-"classification_L2"
+LU_L3_classes$classif_level<-"classification_L3"
+LU_L4_classes$classif_level<-"classification_L4"
+LU_L5_classes$classif_level<-"classification_L5"
 
 LU_classes<-rbind(LU_L1_classes,LU_L2_classes,LU_L3_classes,LU_L4_classes,LU_L5_classes)
 LU_classes <- LU_classes %>% arrange(classif_level,pixval)
 LU_classes <- cbind(fid = 1:nrow(LU_classes), LU_classes)
 dbWriteTable(react_gpkg,"landcover_bf_pixval2class",LU_classes)
+
+# CIV
+cat("loading CIV LU/LC rasters...\n")
+path_to_LU_L1_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L1.tif"
+path_to_LU_L2_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L2.tif"
+path_to_LU_L3_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L3.tif"
+path_to_LU_L4_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L4.tif"
+path_to_LU_L5_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L5.tif"
+gdal_translate(path_to_LU_L1_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L1"))
+gdal_translate(path_to_LU_L2_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L2"))
+gdal_translate(path_to_LU_L3_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L3"))
+gdal_translate(path_to_LU_L4_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L4"))
+gdal_translate(path_to_LU_L5_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L5"))
+
+path_to_LU_L1_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L1.csv"
+path_to_LU_L2_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L2.csv"
+path_to_LU_L3_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L3.csv"
+path_to_LU_L4_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L4.csv"
+path_to_LU_L5_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L5.csv"
+
+LU_L1_classes<-read.csv(path_to_LU_L1_classes)
+LU_L2_classes<-read.csv(path_to_LU_L2_classes)
+LU_L3_classes<-read.csv(path_to_LU_L3_classes)
+LU_L4_classes<-read.csv(path_to_LU_L4_classes)
+LU_L5_classes<-read.csv(path_to_LU_L5_classes)
+
+LU_L1_classes$classif_level<-"classification_L1"
+LU_L2_classes$classif_level<-"classification_L2"
+LU_L3_classes$classif_level<-"classification_L3"
+LU_L4_classes$classif_level<-"classification_L4"
+LU_L5_classes$classif_level<-"classification_L5"
+
+LU_classes<-rbind(LU_L1_classes,LU_L2_classes,LU_L3_classes,LU_L4_classes,LU_L5_classes)
+LU_classes <- LU_classes %>% arrange(classif_level,pixval)
+LU_classes <- cbind(fid = 1:nrow(LU_classes), LU_classes)
+dbWriteTable(react_gpkg,"landcover_civ_pixval2class",LU_classes)
+}
 
 # Pedology (raster)
 path_to_pedology_civ<-"/home/ptaconet/Documents/react/data_CIV/pedology/pedo_final_32630.tif"
