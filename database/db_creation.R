@@ -125,11 +125,11 @@ path_to_LU_L2_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classif
 path_to_LU_L3_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L3.tif"
 path_to_LU_L4_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L4.tif"
 path_to_LU_L5_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L5.tif"
-gdal_translate(path_to_LU_L1_bf,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L1"))
-gdal_translate(path_to_LU_L2_bf,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L2"))
-gdal_translate(path_to_LU_L3_bf,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L3"))
-gdal_translate(path_to_LU_L4_bf,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L4"))
-gdal_translate(path_to_LU_L5_bf,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L5"))
+gdal_translate(path_to_LU_L1_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L1"))
+gdal_translate(path_to_LU_L2_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L2"))
+gdal_translate(path_to_LU_L3_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L3"))
+gdal_translate(path_to_LU_L4_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L4"))
+gdal_translate(path_to_LU_L5_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_L5"))
 
 path_to_LU_L1_classes<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L1.csv"
 path_to_LU_L2_classes<-"/home/ptaconet/Documents/react/data_BF/Classification/classification_L2.csv"
@@ -161,11 +161,11 @@ path_to_LU_L2_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/class
 path_to_LU_L3_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L3.tif"
 path_to_LU_L4_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L4.tif"
 path_to_LU_L5_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L5.tif"
-gdal_translate(path_to_LU_L1_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L1"))
-gdal_translate(path_to_LU_L2_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L2"))
-gdal_translate(path_to_LU_L3_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L3"))
-gdal_translate(path_to_LU_L4_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L4"))
-gdal_translate(path_to_LU_L5_civ,path_to_gpkg_database,ot="UInt16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L5"))
+gdal_translate(path_to_LU_L1_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L1"))
+gdal_translate(path_to_LU_L2_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L2"))
+gdal_translate(path_to_LU_L3_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L3"))
+gdal_translate(path_to_LU_L4_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L4"))
+gdal_translate(path_to_LU_L5_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_L5"))
 
 path_to_LU_L1_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L1.csv"
 path_to_LU_L2_classes<-"/home/ptaconet/Documents/react/data_CIV/Classification/classification_L2.csv"
@@ -191,11 +191,19 @@ LU_classes <- cbind(fid = 1:nrow(LU_classes), LU_classes)
 dbWriteTable(react_gpkg,"landcover_civ_pixval2class",LU_classes)
 }
 
+## Built up surfaces
+#source("/home/ptaconet/r_react/database/builtup.R)
+path_to_builtup_civ<-"/home/ptaconet/Documents/react/data_CIV/Classification/bati_raster.tif"
+path_to_builtup_bf<-"/home/ptaconet/Documents/react/data_BF/Classification/bati_raster.tif"
+gdal_translate(path_to_builtup_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_civ_builtup")) # Tip : Setting Int16 as 'ot' value enables to store source NA as NA in output (and not 0)
+gdal_translate(path_to_builtup_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=landcover_bf_builtup"))
+
+
 # Pedology (raster)
-path_to_pedology_civ<-"/home/ptaconet/Documents/react/data_CIV/pedology/pedo_final_32630.tif"
-path_to_pedology_bf<-"/home/ptaconet/Documents/react/data_BF/pedology/pedo_final_32630.tif"
-gdal_translate(path_to_pedology_civ,path_to_gpkg_database,ot="Float32",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_civ"))
-gdal_translate(path_to_pedology_bf,path_to_gpkg_database,ot="Float32",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_bf"))
+path_to_pedology_civ<-"/home/ptaconet/Documents/react/data_CIV/pedology/pedology.tif"
+path_to_pedology_bf<-"/home/ptaconet/Documents/react/data_BF/pedology/pedology.tif"
+gdal_translate(path_to_pedology_civ,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_civ"))
+gdal_translate(path_to_pedology_bf,path_to_gpkg_database,ot="Int16",of="GPKG",b=1,co=c("APPEND_SUBDATASET=YES","RASTER_TABLE=pedology_bf"))
 
 
 dbSendQuery(react_gpkg,"VACUUM") # It is very important to Vacuum. Not vacuuming may prevent the DB to be opened. 

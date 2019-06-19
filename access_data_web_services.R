@@ -39,8 +39,11 @@ path_to_texture_inertia<-"VHR_SPOT6/processed_data/HaralickTextures_simple_5_5_4
 threshold_inertia_built_areas<-3 # CIV : 3 ; BF : 2.2        ## TODO NEXT DEV : automatize the thresholding (Otsu or other)
 buffer_built_surf_density<-100 # buffer (in meters) to consider to calculate the built up density around each catch point
 # Land use / land cover  (source: own) #TODO next dev: automatic implementation with Esa Global Land Cover map 
-use_lu_lc<-TRUE
-path_to_landcover_dataset<-"Classification/classification_L3.gpkg"
+use_lulc<-TRUE
+source_lulc<-"own" # {"own","copenicus_global_lc"}
+path_to_lulc_rasters<-c("Classification/classification_L2.tif","Classification/classification_L3.tif","Classification/classification_L4.tif")  # fill-in if source = "own". Path to the LU/LC rasters in TIF format.
+path_to_lulc_rat<-c("Classification/classification_L2.csv","Classification/classification_L3.csv","Classification/classification_L4.csv") # fill-in if source = "own". Path to the Raster Attribute Tables of each LU/LC raster.
+url_to_copenicus_glob<-"https://s3-eu-west-1.amazonaws.com/vito-lcv/2015/ZIPfiles/W020N20_ProbaV_LC100_epoch2015_global_v2.0.1_products_EPSG-4326.zip"  # website : https://lcviewer.vito.be/download  .TODO NEXT DEV : automatise the downloading
 # Pedology (source: own)
 use_pedology<-TRUE
 path_to_pedology_dataset<-"pedology/pedology.tif"
@@ -110,6 +113,7 @@ library(stringr)
 require(rgrass7)
 require(landscapemetrics)
 require(landscapetools)
+require(purrr)
 require(spatstat)
 require(maptools)
 require(geojsonsf)
@@ -660,20 +664,58 @@ cat("END integration pedology data")
 ########### A.4 Land use / land cover ###############
 ##########################################################################
 
-if(use_lu_lc){
-  cat(" A.4 Integrating land use / land cover data ...\n")
-  # See https://r-spatialecology.github.io/landscapemetrics/articles/articles/utility.html
+# See https://r-spatialecology.github.io/landscapemetrics/articles/articles/utility.html
+# See https://www.r-craft.org/r-news/efficient-landscape-metrics-calculations-for-buffers-around-sampling-points/
+
+# To get the list of available landscape metrics : list_lsm()
+
 #####################################
-########### A.4.1 Open the data ###############
+########### A.1.1 Download the data ###############
 #####################################
 
-    
+if(use_lu_lc){
+  cat(" A.4 Integrating land use / land cover data ...\n")
+  
+  if (source_lulc=="copenicus_global_lc"){
+    cat("Downloading the Copenicus global land cover product...\n")
+    path_to_lulc_folder<-"copenicus_global_lc"
+    dir.create(path_to_lulc_folder)
+    download.file(url_to_copenicus_glob,file.path(path_to_lulc_folder,"W020N20_ProbaV_LC100_epoch2015_global_v2.0.1_products_EPSG-4326.zip"))
+    unzip(list.files(path_to_lulc_folder,pattern = ".zip"),path_to_lulc_folder)
+  }
+
 #####################################
 ########### A.4.2 Prepare the data ###############
 #####################################
 
+  # Get all the LU/LC rasters
+  lulc_rasters<-raster::stack(path_to_lulc_rasters)
 
-
+  dates_locations_hlc_sp <- spTransform(dates_locations_hlc_sp,proj4string(lulc_rasters))
+  
+  sizes = buffer_sizes_meters
+  
+  for (i in 1:nlayers(lulc_rasters)){
+    # Calculate the landscape metrics for the raster i and for the 3 buffer sizes
+    cat(paste0("Calculating landscape metrics for LU/LC layer '",names(lulc_rasters)[i], "' (layer n°",i," over ",nlayers(lulc_rasters),")...\n"))
+    two_sizes_output = sizes %>% 
+      purrr::set_names() %>% 
+      map_dfr(~sample_lsm(lulc_rasters[[i]], 
+                          dates_locations_hlc_sp, 
+                          what = "lsm_l_shdi",
+                          shape = "circle",
+                          size = .,
+                          verbose = TRUE,
+                          progress=TRUE),
+              .id = "buffer")
+    
+    
+  }
+    
+# extract lulc on a buffer around 1 point : r<-crop(lulc_rasters[[3]],extent(buffer(dates_locations_hlc_sp[1,],2000)))
+  
+  
+    
 #####################################
 ########### A.4.3 Calculate stats within the buffer ###############
 #####################################
