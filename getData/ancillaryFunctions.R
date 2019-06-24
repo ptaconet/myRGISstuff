@@ -1,0 +1,103 @@
+# Set of functions to calculate various information given a ROI 
+
+
+getUTMepsg<-function(roi){
+  
+  bbox<-st_bbox(roi)
+  #  cat("Warning: ROIs overlapping more than 1 UTM zone are currently not adapted in this workflow\n")
+  utm_zone_number<-(floor((bbox$xmin + 180)/6) %% 60) + 1
+  if(bbox$ymin>0){ # if latitudes are North
+    epsg<-as.numeric(paste0("326",utm_zone_number))
+  } else { # if latitude are South
+    epsg<-as.numeric(paste0("325",utm_zone_number))
+  }
+  
+  return(epsg)
+}
+
+
+getMODIStileNames<-function(roi){
+  
+  modis_tile = read_sf("https://modis.ornl.gov/files/modis_sin.kmz") %>% 
+    st_intersection(roi) %>% 
+    as.data.frame() %>%
+    select(Name) %>%
+    as.character()
+  
+  if(length(unique(modis_tile))>1){
+    stop("Your ROI is overlapping more than 1 MODIS tile. This workflow is currently not adapted for this case\n")
+  } else {
+    modis_tile<-modis_tile %>%
+      unique() %>%
+      str_replace_all(c(" "="",":"=""))
+    for (i in 1:9){
+      modis_tile<-gsub(paste0("h",i,"v"),paste0("h0",i,"v"),modis_tile)
+    }
+    if(nchar(modis_tile)!=6){
+      modis_tile<-paste0(substr(modis_tile,1,4),"0",substr(modis_tile,5,5))
+    }
+  }
+  
+  return(modis_tile)
+}
+
+
+getSRTMtileNames<-function(roi){
+  
+  srtm_tiles <- geojsonsf::geojson_sf("http://dwtkns.com/srtm30m/srtm30m_bounding_boxes.json")  %>%
+    sf::st_intersection(roi) %>%
+    as.data.frame()
+
+  SRTMtileNames<-substr(srtm_tiles$dataFile,1,7)
+  
+  return(SRTMtileNames)
+}
+
+
+convertMetersToDegrees<-function(roi_sf,
+                                 length_meters,
+                                 latitude_4326=NULL){
+
+  if (is.null(latitude_4326)){
+    bbox<-st_bbox(roi_sf)
+    latitude_4326<-mean(as.numeric(roi_bbox[c(2,4)]))
+  }
+  
+  length_degrees <- length_meters / (111.32 * 1000 * cos(latitude_4326 * ((pi / 180))))
+  
+  return(length_degrees)
+}
+
+
+downloadData<-function(urls,destfiles){
+  
+  # check which data is already downloaded
+  data_dl<-data.frame(url=urls,destfile=destfiles,stringsAsFactors = F) %>%
+      mutate(fileExist=map_lgl(destfile,file.exists)) %>%
+      mutate(status=ifelse(fileExist==TRUE,3,NA))
+  
+  # data already downloaded
+  data_already_exist<-data_dl %>%
+    filter(fileExist==TRUE)
+    
+  # data to download
+  data_to_download<-data_dl %>%
+    filter(fileExist==FALSE)
+    #map2(urls,destfiles,.f=~GET(.x,write_disk(.y))) 
+
+    # download data
+    for (i in 1:nrow(data_to_download)){
+      httr::GET(data_to_download[i,"url"],write_disk(destfiles[i],"destfiles"))
+    }
+  
+    data_dl<-data_to_download %>%
+    mutate(fileExist=map_lgl(destfile,file.exists)) %>%
+    mutate(status=ifelse(fileExist==TRUE,1,2))  %>%
+    rbind(data_already_exist)
+  
+  # 1 : download ok
+  # 2 : download error
+  # 3 : data already existing in output folder
+
+    return(data_dl)
+}
