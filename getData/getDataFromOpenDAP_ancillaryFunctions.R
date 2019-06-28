@@ -15,12 +15,14 @@ getOpenDAPvector<-function(OpenDAPUrl,
 }
 
 
-getOpenDapURL_dimensions<-function(dimensionsToRetrieve,timeIndex,roiSpatialIndexBound){
+getOpenDapURL_dimensions<-function(dimensionsToRetrieve,timeIndex,roiSpatialIndexBound,TimeVectorName,SpatialXVectorName,SpatialYVectorName){
   dimensionsToRetrieve %>%
-    map(~paste0(.x,"[",timeIndex,"][",roiSpatialIndexBound[1],":",roiSpatialIndexBound[2],"][",roiSpatialIndexBound[3],":",roiSpatialIndexBound[4],"]")) %>%
+    map(~paste0(.x,"[",timeIndex,"][",roiSpatialIndexBound[1],":",roiSpatialIndexBound[2],"][",roiSpatialIndexBound[3],":",roiSpatialIndexBound[4],"],",TimeVectorName,"[",timeIndex,"],",SpatialYVectorName,"[",roiSpatialIndexBound[1],":",roiSpatialIndexBound[2],"],",SpatialXVectorName,"[",roiSpatialIndexBound[3],":",roiSpatialIndexBound[4],"]")) %>%
     unlist() %>%
     paste(collapse=",")
 }
+
+
 
 getOpenDAPtimeIndex_modis<-function(date,
                                     timeVector){

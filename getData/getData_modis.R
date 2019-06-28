@@ -1,18 +1,20 @@
 
 
 # Build openDAP modis URL for a given collection, time range and ROI, to retrieve the data in the ROI and for the closest available dates to the one provided
-getData_modis<-function(time_range=c(as.Date("2010-01-01"),as.Date("2010-01-30")), # mandatory.
-                        roi=st_read("/home/ptaconet/r_react/getData/ROI_test.kml",quiet=T), # either provide roi_sf or provide roiSpatialIndexBound. if roiSpatialIndexBound is not provided, it will be calculated from roi_sf
+getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. either a time range (e.g. c(date_start,date_end) ) or a single date e.g. ( date_start )
+                        roi=st_read("/home/ptaconet/r_react/getData/ROI_test.kml",quiet=T), # either provide roi (sf point or polygon) or provide roiSpatialIndexBound. if roiSpatialIndexBound is not provided, it will be calculated from roi
+                        username=NULL, # EarthData user name
+                        password=NULL, # EarthData password
                         OpenDAPCollection="MOD11A1.006", # mandatory
-                        download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
+                        #download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
                         destFolder=NULL,
                         modisTile=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
                         dimensionsToRetrieve=c("LST_Day_1km","LST_Night_1km"), # mandatory
-                        timeVector, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        XVector, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        YVector, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        roiSpatialIndexBound, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        TimeIndex, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                        timeVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                        XVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                        YVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                        roiSpatialIndexBound=NULL,# optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                        ...
 ){
   
   OpenDAPServerUrl="https://opendap.cr.usgs.gov/opendap/hyrax"
@@ -37,15 +39,15 @@ getData_modis<-function(time_range=c(as.Date("2010-01-01"),as.Date("2010-01-30")
   OpenDAPModisURL<-paste0(OpenDAPServerUrl,"/",OpenDAPCollection,"/",modisTile,".ncml")
   
   # Calculate TimeVector if not provided
-  if(is.null(TimeVector)){
+  if(is.null(timeVector)){
     timeVector<-getOpenDAPvector(OpenDAPModisURL,TimeVectorName)
   }
   # Calculate XVector if not provided
-  if(is.null(XVector)){
+  if(is.null(XVector) & is.null(roiSpatialIndexBound)){
     XVector<-getOpenDAPvector(OpenDAPModisURL,SpatialXVectorName)
   }
   # Calculate YVector if not provided
-  if(is.null(XVector)){
+  if(is.null(YVector) & is.null(roiSpatialIndexBound)){
     YVector<-getOpenDAPvector(OpenDAPModisURL,SpatialYVectorName)
   }
   # Calculate roiSpatialIndexBound if not provided
@@ -60,6 +62,10 @@ getData_modis<-function(time_range=c(as.Date("2010-01-01"),as.Date("2010-01-30")
   
 
   # Get openDAP time indices for the time frame of interest
+  time_range<-as.Date(time_range,origin="1970-01-01")
+  if (length(time_range)==1){
+    time_range=c(time_range,time_range)
+  }
   
   revisit_time<-timeVector[2]-timeVector[1]
   
@@ -73,42 +79,24 @@ getData_modis<-function(time_range=c(as.Date("2010-01-01"),as.Date("2010-01-30")
   # Build URL to download data in NetCDF format
   
   table_urls<-timeIndices_of_interest %>%
-    mutate(dimensions_url=map(.x=index_opendap_closest_to_date,.f=~getOpenDapURL_dimensions(dimensionsToRetrieve,.x,roiSpatialIndexBound))) %>%
-    mutate(url=paste0(OpenDAPModisURL,
-                      ".nc4?",
-                      gridDimensionName,
-                      ",",
-                      dimensions_url,
-                      ",",
-                      TimeVectorName,
-                      "[",
-                      index_opendap_closest_to_date,
-                      "],",
-                      SpatialYVectorName,
-                      "[",
-                      roiSpatialIndexBound[1],
-                      ":",
-                      roiSpatialIndexBound[2],
-                      "],",
-                      SpatialXVectorName,
-                      "[",
-                      roiSpatialIndexBound[3],
-                      ":",
-                      roiSpatialIndexBound[4],
-                      "]"))
+    mutate(dimensions_url=map(.x=index_opendap_closest_to_date,.f=~getOpenDapURL_dimensions(dimensionsToRetrieve,.x,roiSpatialIndexBound,TimeVectorName,SpatialXVectorName,SpatialYVectorName))) %>%
+    mutate(url=paste0(OpenDAPModisURL,".nc4?",gridDimensionName,",",dimensions_url))
 
   
-  urls=table_urls$url
+  urls<-table_urls$url
+
+  destfiles<-paste0(file.path(destFolder,paste0(OpenDAPCollection,"_",gsub("-","",table_urls$date_closest_to_ideal_date))),".nc4")
   
-  if (download){
-    destfiles<-paste0(file.path(destFolder,paste0(OpenDAPCollection,"_",gsub("-","",table_urls$date_closest_to_ideal_date))),".nc4")
-    res<-downloadData(urls,destfiles)
-  } else {
-    destfiles<-res<-NULL
-  }
+  names<-as.numeric(timeIndices_of_interest$date_closest_to_ideal_date)
+  
+  #if (download){
+  #  res<-downloadData(urls,destfiles,username,password,parallel)
+  #} else {
+  #  res<-1:length(urls);NA
+  #}
   
   
-  return(list(urls,destfiles,res))
+  return(list(name=names,url=urls,destfile=destfiles))
   
 }
 

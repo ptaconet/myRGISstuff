@@ -21,7 +21,7 @@ getMODIStileNames<-function(roi){
   modis_tile = read_sf("https://modis.ornl.gov/files/modis_sin.kmz") %>% 
     st_intersection(roi) %>% 
     as.data.frame() %>%
-    select(Name) %>%
+    dplyr::select(Name) %>%
     as.character()
   
   if(length(unique(modis_tile))>1){
@@ -29,7 +29,7 @@ getMODIStileNames<-function(roi){
   } else {
     modis_tile<-modis_tile %>%
       unique() %>%
-      str_replace_all(c(" "="",":"=""))
+      stringr::str_replace_all(c(" "="",":"=""))
     for (i in 1:9){
       modis_tile<-gsub(paste0("h",i,"v"),paste0("h0",i,"v"),modis_tile)
     }
@@ -69,7 +69,7 @@ convertMetersToDegrees<-function(roi_sf,
 }
 
 
-downloadData<-function(urls,destfiles){
+downloadData<-function(urls,destfiles,username,password,parallelDL){
   
   # check which data is already downloaded
   data_dl<-data.frame(url=urls,destfile=destfiles,stringsAsFactors = F) %>%
@@ -86,9 +86,24 @@ downloadData<-function(urls,destfiles){
     #map2(urls,destfiles,.f=~GET(.x,write_disk(.y))) 
 
     # download data
+  #for (i in 1:nrow(data_to_download)){
+  #    httr::GET(data_to_download$url[i],httr::authenticate(username,password),write_disk(data_to_download$destfile[i]))
+  # }
+  
+   dl_func<-function(url,output,username,password) {httr::GET(url,httr::authenticate(username,password),httr::write_disk(output),httr::progress())}
+  
+  if (parallelDL){
+  require(parallel)
+  cl <- makeCluster(detectCores())
+  clusterMap(cl, dl_func, url=data_to_download$url,output=data_to_download$destfile, username=username,password=password,
+             .scheduling = 'dynamic')
+  stopCluster(cl)
+  } else {
     for (i in 1:nrow(data_to_download)){
-      httr::GET(data_to_download[i,"url"],write_disk(destfiles[i],"destfiles"))
+      dl_func(url=data_to_download$url[i],output=data_to_download$destfile[i], username=username,password=password)
+      print(i)
     }
+  }
   
     data_dl<-data_to_download %>%
     mutate(fileExist=map_lgl(destfile,file.exists)) %>%
