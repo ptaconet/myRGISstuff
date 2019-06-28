@@ -169,7 +169,8 @@ Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,"ptaconet","HHKcue51",
      res<-list_rast[between(as.numeric(names(list_rast)),origin_date-lagTime_timeSeries,origin_date)] %>%  # filter only the rasters between our dates of interest
        rev %>%
        future_map_dfr(~raster::extract(.,spTransform(spPoints,proj4string(.)),buffer=buffer_size,fun=mean, na.rm=TRUE, small=FALSE)) %>% # for each raster, calculate the stats
-       set_names(paste0(covariateAbr,"_",origin_date-as.numeric(names(.)))) %>%
+       #set_names(paste0(covariateAbr,"_",origin_date-as.numeric(names(.)))) %>% ## to name by the number of days separating the date of interest from the the day of the data
+       set_names(paste0(covariateAbr,"_",seq(0,ncol(.)-1,1))) %>%   ## to name by the index of the column
        mutate(idpointdecapture=as.character(spPoints$idpointdecapture)) %>%
        mutate(date=origin_date) %>%
        mutate(buffer=buffer_size) #%>%
@@ -184,26 +185,93 @@ Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,"ptaconet","HHKcue51",
    require(furrr)
    plan(multiprocess) # use furrr for parallel computing
    
-   tic()
    lst_min<-buffer_sizes %>% # for each buffer, calculate stats
      set_names %>%
      future_map_dfr(~pmap_dfr(list(dates_loc$lagTime_timeSeries,dates_loc$sp_points,dates_loc$date_numeric,.),
                  ~fun_extract(rasts_lst_min,..1,..2,..3,"lstMin",..4))) %>%
      select(idpointdecapture,date,buffer,everything())
-   toc()
-   
-   tic()
+
+
    lst_max<-buffer_sizes %>% # for each buffer, calculate stats
      set_names %>%
      future_map_dfr(~pmap_dfr(list(dates_loc$lagTime_timeSeries,dates_loc$sp_points,dates_loc$date_numeric,.),
                        ~fun_extract(rasts_lst_max,..1,..2,..3,"lstMax",..4))) %>%
      select(idpointdecapture,date,buffer,everything())
-   toc()
+
+   
+   
+   ### modis veget
+   
+   mod<-modify(modisData_md,c("MOD13Q1.006"))
+   myd<-modify(modisData_md,c("MYD13Q1.006"))
+   
+   path_to_mod<-mod %>%
+     map(data.frame) %>%
+     reduce(bind_rows) %>%
+     select(name,destfile) %>%
+     unique
+   
+   path_to_myd<-myd %>%
+     map(data.frame) %>%
+     reduce(bind_rows) %>%
+     select(name,destfile) %>%
+     unique
+   
+   path_to_mod_myd<-rbind(path_to_mod,path_to_myd) %>%
+     arrange(name)
+   
+   rasts_ndvi<-path_to_mod_myd %>%
+     mutate(ndvi=map(destfile,~prepareData_modis_open(.,"_250m_16_days_NDVI"))) %>%
+     pluck("ndvi") %>%
+     set_names(path_to_mod_myd$name) 
+ 
+   rasts_evi<-path_to_mod_myd %>%
+     mutate(evi=map(destfile,~prepareData_modis_open(.,"_250m_16_days_EVI"))) %>%
+     pluck("evi") %>%
+     set_names(path_to_mod_myd$name) 
+     
+   ndvi<-buffer_sizes %>% # for each buffer, calculate stats
+     set_names %>%
+     future_map_dfr(~pmap_dfr(list(dates_loc$lagTime_timeSeries,dates_loc$sp_points,dates_loc$date_numeric,.),
+                              ~fun_extract(rasts_ndvi,..1,..2,..3,"ndvi",..4))) %>%
+     select(idpointdecapture,date,buffer,everything())
+   
+   evi<-buffer_sizes %>% # for each buffer, calculate stats
+     set_names %>%
+     future_map_dfr(~pmap_dfr(list(dates_loc$lagTime_timeSeries,dates_loc$sp_points,dates_loc$date_numeric,.),
+                              ~fun_extract(rasts_evi,..1,..2,..3,"evi",..4))) %>%
+     select(idpointdecapture,date,buffer,everything())
    
    
    
+   ## modis evapotranspiration
    
+   mod<-modify(modisData_md,c("MOD16A2.006"))
+   myd<-modify(modisData_md,c("MYD16A2.006"))
    
+   path_to_mod<-mod %>%
+     map(data.frame) %>%
+     reduce(bind_rows) %>%
+     select(name,destfile) %>%
+     unique
+   
+   path_to_myd<-myd %>%
+     map(data.frame) %>%
+     reduce(bind_rows) %>%
+     select(name,destfile) %>%
+     unique
+   
+   path_to_mod_myd<-merge(path_to_mod,path_to_myd,by="name",suffixes = c("_mod","_myd"))
+ 
+   rast_et<-path_to_mod_myd %>%
+     mutate(rast_mod=map(destfile_mod,~prepareData_modis_open(.,"ET_500m"))) %>%
+     mutate(rast_myd=map(destfile_myd,~prepareData_modis_open(.,"ET_500m"))) %>%
+     mutate(rast_mod=map(rast_mod,~clamp(.x,upper=32760,useValues=FALSE))) %>% ## Set pixel values >= 32760 (quality pixel values) to NA 
+     mutate(rast_myd=map(rast_myd,~clamp(.x,upper=32760,useValues=FALSE))) %>% ## Set pixel values >= 32760 (quality pixel values) to NA 
+     mutate(et=map2(rast_mod,rast_myd,~mean(.x,.y,na.rm = T))) %>%
+     pluck("et") %>%
+     set_names(path_to_mod_myd$name)
+     
 }
 
 
