@@ -13,8 +13,7 @@ getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. ei
                         timeVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
                         XVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
                         YVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        roiSpatialIndexBound=NULL,# optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                        ...
+                        roiSpatialIndexBound=NULL # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
 ){
   
   OpenDAPServerUrl="https://opendap.cr.usgs.gov/opendap/hyrax"
@@ -25,7 +24,9 @@ getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. ei
   
   if (OpenDAPCollection %in% c("MOD11A1.006","MYD11A1.006")){
     gridDimensionName<-"MODIS_Grid_Daily_1km_LST_eos_cf_projection"
-  } else if (OpenDAPCollection %in% c("MOD13Q1.006","MYD13Q1.006")){
+  } else if (OpenDAPCollection %in% c("MOD11A2.006","MYD11A2.006")){
+    gridDimensionName<-"MODIS_Grid_8Day_1km_LST_eos_cf_projection"
+    } else if (OpenDAPCollection %in% c("MOD13Q1.006","MYD13Q1.006")){
     gridDimensionName<-"MODIS_Grid_16DAY_250m_500m_VI_eos_cf_projection"
   } else if (OpenDAPCollection %in% c("MOD16A2.006","MYD16A2.006")){
     gridDimensionName<-"MOD_Grid_MOD16A2_eos_cf_projection"
@@ -36,27 +37,27 @@ getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. ei
     modisTile<-getMODIStileNames(roi)
   }
   
-  OpenDAPModisURL<-paste0(OpenDAPServerUrl,"/",OpenDAPCollection,"/",modisTile,".ncml")
+  OpenDAPURL<-paste0(OpenDAPServerUrl,"/",OpenDAPCollection,"/",modisTile,".ncml")
   
   # Calculate TimeVector if not provided
   if(is.null(timeVector)){
-    timeVector<-getOpenDAPvector(OpenDAPModisURL,TimeVectorName)
+    timeVector<-getOpenDAPvector(OpenDAPURL,TimeVectorName)
   }
   # Calculate XVector if not provided
   if(is.null(XVector) & is.null(roiSpatialIndexBound)){
-    XVector<-getOpenDAPvector(OpenDAPModisURL,SpatialXVectorName)
+    XVector<-getOpenDAPvector(OpenDAPURL,SpatialXVectorName)
   }
   # Calculate YVector if not provided
   if(is.null(YVector) & is.null(roiSpatialIndexBound)){
-    YVector<-getOpenDAPvector(OpenDAPModisURL,SpatialYVectorName)
+    YVector<-getOpenDAPvector(OpenDAPURL,SpatialYVectorName)
   }
   # Calculate roiSpatialIndexBound if not provided
   if(is.null(roiSpatialIndexBound)){
-    roi_bbox_modisCRS<-sf::st_bbox(st_transform(roi,modisCollection_crs))
-    Opendap_minLon<-which.min(abs(XVector-roi_bbox_modisCRS$xmin))-1
-    Opendap_maxLon<-which.min(abs(XVector-roi_bbox_modisCRS$xmax))-1
-    Opendap_maxLat<-which.min(abs(YVector-roi_bbox_modisCRS$ymin))-1
-    Opendap_minLat<-which.min(abs(YVector-roi_bbox_modisCRS$ymax))-1
+    roi_bbox<-sf::st_bbox(st_transform(roi,modisCollection_crs))
+    Opendap_minLon<-which.min(abs(XVector-roi_bbox$xmin))-1
+    Opendap_maxLon<-which.min(abs(XVector-roi_bbox$xmax))-1
+    Opendap_maxLat<-which.min(abs(YVector-roi_bbox$ymin))-1
+    Opendap_minLat<-which.min(abs(YVector-roi_bbox$ymax))-1
     roiSpatialIndexBound<-c(Opendap_minLat,Opendap_maxLat,Opendap_minLon,Opendap_maxLon)
   }
   
@@ -80,7 +81,7 @@ getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. ei
   
   table_urls<-timeIndices_of_interest %>%
     mutate(dimensions_url=map(.x=index_opendap_closest_to_date,.f=~getOpenDapURL_dimensions(dimensionsToRetrieve,.x,roiSpatialIndexBound,TimeVectorName,SpatialXVectorName,SpatialYVectorName))) %>%
-    mutate(url=paste0(OpenDAPModisURL,".nc4?",gridDimensionName,",",dimensions_url))
+    mutate(url=paste0(OpenDAPURL,".nc4?",gridDimensionName,",",dimensions_url))
 
   
   urls<-table_urls$url

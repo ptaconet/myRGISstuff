@@ -54,15 +54,9 @@ getSRTMtileNames<-function(roi){
 }
 
 
-convertMetersToDegrees<-function(roi_sf,
-                                 length_meters,
-                                 latitude_4326=NULL){
+convertMetersToDegrees<-function(length_meters,
+                                 latitude_4326){
 
-  if (is.null(latitude_4326)){
-    bbox<-st_bbox(roi_sf)
-    latitude_4326<-mean(as.numeric(roi_bbox[c(2,4)]))
-  }
-  
   length_degrees <- length_meters / (111.32 * 1000 * cos(latitude_4326 * ((pi / 180))))
   
   return(length_degrees)
@@ -83,7 +77,6 @@ downloadData<-function(urls,destfiles,username,password,parallelDL){
   # data to download
   data_to_download<-data_dl %>%
     filter(fileExist==FALSE)
-    #map2(urls,destfiles,.f=~GET(.x,write_disk(.y))) 
 
     # download data
   #for (i in 1:nrow(data_to_download)){

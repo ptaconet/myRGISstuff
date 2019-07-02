@@ -24,8 +24,7 @@ getOpenDapURL_dimensions<-function(dimensionsToRetrieve,timeIndex,roiSpatialInde
 
 
 
-getOpenDAPtimeIndex_modis<-function(date,
-                                    timeVector){
+getOpenDAPtimeIndex_modis<-function(date,timeVector){
   
   date_julian<-as.integer(difftime(date ,"2000-01-01" , units = c("days")))
   index_opendap_closest_to_date<-which.min(abs(timeVector-date_julian))

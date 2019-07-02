@@ -1,80 +1,100 @@
-getData_gpm<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. either a time range (e.g. c(date_start,date_end) ) or a single date e.g. ( date_start )
+getData_gpm<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. either a time range (e.g. c(date_start,date_end) ) or a single date e.g. ( date_start ) / or a as.POSIXlt single date or time range (e.g. "2010-01-01 18:00:00")
                       roi=st_read("/home/ptaconet/r_react/getData/ROI_test.kml",quiet=T), # either provide roi (sf point or polygon) or provide roiSpatialIndexBound. if roiSpatialIndexBound is not provided, it will be calculated from roi
                       username=NULL, # EarthData user name
                       password=NULL, # EarthData password
                       OpenDAPCollection="GPM_3IMERGHH.06", # mandatory
-                      download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
+                      #download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
                       destFolder=NULL,
-                      modisTile=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                      dimensionsToRetrieve=c("LST_Day_1km","LST_Night_1km"), # mandatory
-                      timeVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                      dimensionsToRetrieve=c("precipitationCal"), # mandatory
                       XVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
                       YVector=NULL, # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                      roiSpatialIndexBound=NULL,# optional. providing it will fasten the processing time. if not provided it will be calculated automatically
-                      ...
-){
+                      roiSpatialIndexBound=NULL # optional. providing it will fasten the processing time. if not provided it will be calculated automatically
+                      ){
   
-  
+  #require(lubridate)
   OpenDAPServerUrl="https://gpm1.gesdisc.eosdis.nasa.gov/opendap/GPM_L3"
-  #TimeVectorName="time"
   SpatialXVectorName="lon"
   SpatialYVectorName="lat"
-  #modisCollection_crs="+proj=sinu +lon_0=0 +x_0=0 +y_0=0 +a=6371007.181 +b=6371007.181 +units=m +no_defs"
   
-  #if (OpenDAPCollection %in% c("MOD11A1.006","MYD11A1.006")){
-  #  gridDimensionName<-"MODIS_Grid_Daily_1km_LST_eos_cf_projection"
-  #} else if (OpenDAPCollection %in% c("MOD13Q1.006","MYD13Q1.006")){
-  #  gridDimensionName<-"MODIS_Grid_16DAY_250m_500m_VI_eos_cf_projection"
-  #} else if (OpenDAPCollection %in% c("MOD16A2.006","MYD16A2.006")){
-  #  gridDimensionName<-"MOD_Grid_MOD16A2_eos_cf_projection"
-  #}
-  
-  # Calculate modisTile if not provided
-  #if(is.null(modisTile)){
-  #  modisTile<-getMODIStileNames(roi)
-  #}
-  
+  # Retrieve info to build url
   if(OpenDAPCollection=="GPM_3IMERGHH.06"){
+
+    #times_gpm_hhourly<-seq(from=as.POSIXlt(paste0(this_date_hlc," ",hh_rainfall_hour_begin,":00:00")),to=as.POSIXlt(as.POSIXlt(paste0(this_date_hlc+1," ",hh_rainfall_hour_end,":00:00"))),by="30 min")
+    time_range=as.POSIXlt(time_range)
+    
+    urls<-seq(from=time_range[2],to=time_range[1],by="-30 min") %>%
+      data.frame(stringsAsFactors = F) %>%
+      set_names("date") %>%
+      mutate(date_character=as.character(as.Date(date))) %>%
+      mutate(year=format(date,'%Y')) %>%
+      mutate(month=format(date,'%m')) %>%
+      mutate(day=sprintf("%03d",lubridate::yday(date))) %>%
+      mutate(hour_start=paste0(sprintf("%02d",hour(date)),sprintf("%02d",minute(date)),sprintf("%02d",second(date)))) %>%
+      mutate(hour_end=date+minutes(29)+seconds(59)) %>%
+      mutate(hour_end=paste0(sprintf("%02d",hour(hour_end)),sprintf("%02d",minute(hour_end)),sprintf("%02d",second(hour_end)))) %>%
+      mutate(number_minutes_from_start_day=sprintf("%04d",difftime(date,as.POSIXlt(paste0(as.Date(date)," 00:00:00")),units="mins"))) %>%
+      mutate(product_name=paste0("3B-HHR.MS.MRG.3IMERG.",gsub("-","",date_character),"-S",hour_start,"-E",hour_end,".",number_minutes_from_start_day,".V06B.HDF5")) %>%
+      mutate(url_product=paste(OpenDAPServerUrl,OpenDAPCollection,year,day,product_name,sep="/"))
     
   } else if(OpenDAPCollection=="GPM_3IMERGDF.06"){
-  modisTile="2016/02/3B-DAY.MS.MRG.3IMERG.20160201-S000000-E235959.V06B.HDF5"
+
+    time_range=as.Date(time_range,origin="1970-01-01")
+    
+    urls<-seq(time_range[2],time_range[1],-1) %>%
+      data.frame(stringsAsFactors = F) %>%
+      set_names("date") %>%
+      mutate(date_character=as.character(as.Date(date))) %>%
+      mutate(year=format(date,'%Y')) %>%
+      mutate(month=format(date,'%m')) %>%
+      mutate(product_name=paste0("3B-DAY.MS.MRG.3IMERG.",gsub("-","",date_character),"-S000000-E235959.V06.nc4")) %>%
+      mutate(url_product=paste(OpenDAPServerUrl,OpenDAPCollection,year,month,product_name,sep="/"))
+    
+  }
   
-  #OpenDAPModisURL<-paste0(OpenDAPServerUrl,"/",OpenDAPCollection,"/",modisTile,".ncml")
-  OpenDAPModisURL<-paste0(OpenDAPServerUrl,"/",OpenDAPCollection,"/",modisTile,".html")
-  
-  # Calculate TimeVector if not provided
-  #if(is.null(timeVector)){
-  #  timeVector<-getOpenDAPvector(OpenDAPModisURL,TimeVectorName)
-  #}
-  # Calculate XVector if not provided
+  # To retrieve spatial indices
+  OpenDAPURL<-urls$product_name[1]
+    # Calculate XVector if not provided
   if(is.null(XVector) & is.null(roiSpatialIndexBound)){
-    XVector<-getOpenDAPvector(OpenDAPModisURL,SpatialXVectorName)
+    XVector<-getOpenDAPvector(OpenDAPURL,SpatialXVectorName)
   }
   # Calculate YVector if not provided
   if(is.null(YVector) & is.null(roiSpatialIndexBound)){
-    YVector<-getOpenDAPvector(OpenDAPModisURL,SpatialYVectorName)
+    YVector<-getOpenDAPvector(OpenDAPURL,SpatialYVectorName)
   }
   # Calculate roiSpatialIndexBound if not provided
   if(is.null(roiSpatialIndexBound)){
-    roi_bbox_modisCRS<-sf::st_bbox(st_transform(roi,modisCollection_crs))
-    Opendap_minLon<-which.min(abs(XVector-roi_bbox_modisCRS$xmin))-1
-    Opendap_maxLon<-which.min(abs(XVector-roi_bbox_modisCRS$xmax))-1
-    Opendap_maxLat<-which.min(abs(YVector-roi_bbox_modisCRS$ymin))-1
-    Opendap_minLat<-which.min(abs(YVector-roi_bbox_modisCRS$ymax))-1
+    roi_bbox<-sf::st_bbox(st_transform(roi,4326))
+    Opendap_minLon<-which.min(abs(XVector-roi_bbox$xmin))-4
+    Opendap_maxLon<-which.min(abs(XVector-roi_bbox$xmax))+4
+    Opendap_minLat<-which.min(abs(YVector-roi_bbox$ymin))-4
+    Opendap_maxLat<-which.min(abs(YVector-roi_bbox$ymax))+4
     roiSpatialIndexBound<-c(Opendap_minLat,Opendap_maxLat,Opendap_minLon,Opendap_maxLon)
   }
   
+  # Build URL to download data in NetCDF format
   
-  ## Build URLs
+  dim<-dimensionsToRetrieve %>%
+    map(~paste0(.x,"[0:0][",roiSpatialIndexBound[3],":",roiSpatialIndexBound[4],"][",roiSpatialIndexBound[1],":",roiSpatialIndexBound[2],"],",SpatialYVectorName,"[",roiSpatialIndexBound[1],":",roiSpatialIndexBound[2],"],",SpatialXVectorName,"[",roiSpatialIndexBound[3],":",roiSpatialIndexBound[4],"]")) %>%
+    unlist() %>%
+    paste(collapse=",")
+  
+  table_urls<-urls %>%
+    mutate(url=paste0(url_product,".nc4","?",dim)) %>%
+    mutate(destfile=file.path(destFolder,paste0(OpenDAPCollection,product_name,".nc4"))) #%>%
+    #mutate(names=)
+  
+  urls<-table_urls$url
+  
+  destfiles<-table_urls$destfile
+  
+  names<-table_urls$product_name
+  
+  #return(list(name=names,url=urls,destfile=destfiles))
+  return(list(name=names,url=urls,destfile=destfiles))
+  }
   
   
   
   
   
   
-  
-  
-  
-  
-  
-}

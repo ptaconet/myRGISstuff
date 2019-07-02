@@ -1,6 +1,6 @@
 getData_srtm<-function(roi,
                        download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
-                       destFolder=NULL,
+                       destFolder=NULL
                        ){
   
   url_srtm_server<-"http://e4ftl01.cr.usgs.gov/MEASURES/SRTMGL1.003/2000.02.11/"
