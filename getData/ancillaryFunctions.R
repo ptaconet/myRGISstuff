@@ -63,7 +63,7 @@ convertMetersToDegrees<-function(length_meters,
 }
 
 
-downloadData<-function(urls,destfiles,username,password,parallelDL){
+downloadData<-function(urls,destfiles,username=NULL,password=NULL,parallelDL=FALSE){
   
   # check which data is already downloaded
   data_dl<-data.frame(url=urls,destfile=destfiles,stringsAsFactors = F) %>%
@@ -83,18 +83,20 @@ downloadData<-function(urls,destfiles,username,password,parallelDL){
   #    httr::GET(data_to_download$url[i],httr::authenticate(username,password),write_disk(data_to_download$destfile[i]))
   # }
   
+  if(is.null(username)){
+    username<-password<-"no_auth"
+  }
    dl_func<-function(url,output,username,password) {httr::GET(url,httr::authenticate(username,password),httr::write_disk(output),httr::progress())}
   
   if (parallelDL){
   require(parallel)
   cl <- makeCluster(detectCores())
-  clusterMap(cl, dl_func, url=data_to_download$url,output=data_to_download$destfile, username=username,password=password,
+  clusterMap(cl, dl_func, url=data_to_download$url,output=data_to_download$destfile,username=username,password=password,
              .scheduling = 'dynamic')
   stopCluster(cl)
   } else {
     for (i in 1:nrow(data_to_download)){
-      dl_func(url=data_to_download$url[i],output=data_to_download$destfile[i], username=username,password=password)
-      print(i)
+      dl_func(url=data_to_download$url[i],output=data_to_download$destfile[i],username=username,password=password)
     }
   }
   

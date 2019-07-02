@@ -30,6 +30,7 @@ dataSources_static<-c("SRTMGL1_v003","CGLS-LC100")
 buffer_sizes<-c(500,1000,2000)
 gpmDay_resample_output_res=250
 gpmHhour_resample_output_res=250
+tamsatDay_resample_output_res=250
 gpmHhour_hour_start<-"18"
 gpmHhour_hour_end<-"08"
 
@@ -55,6 +56,10 @@ source("/home/ptaconet/r_react/getData/prepareData_modis.R")
 source("/home/ptaconet/r_react/getData/getDataFromOpenDAP_ancillaryFunctions.R")
 source("/home/ptaconet/r_react/getData/ancillaryFunctions.R")
 source("/home/ptaconet/r_react/getData/getData_srtm.R")
+source("/home/ptaconet/r_react/getData/getData_gpm.R")
+source("/home/ptaconet/r_react/getData/prepareData_gpm.R")
+source("/home/ptaconet/r_react/getData/getData_tamsat.R")
+source("/home/ptaconet/r_react/getData/prepareData_tamsat.R")
 
 
 ## Connection to the EarthData servers
@@ -202,7 +207,7 @@ modisData_md<-dates %>%
 directories<-modisOpenDAP_md$source %>%
   as.character() %>%
   as.list()  %>%
-  lapply(dir.create)
+  lapply(dir.create,recursive = TRUE)
 
 # Then download
 df_DataToDL<-modisData_md %>%
@@ -365,7 +370,7 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
    directories<-gpmOpenDAP_md$source %>%
      as.character() %>%
      as.list()  %>%
-     lapply(dir.create)
+     lapply(dir.create,recursive = TRUE)
    
    # Then download
    df_DataToDL<-gpmData_md_daily %>%
@@ -390,15 +395,15 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
    # Build paths to data
    path_to_gpmDay<-getPaths(gpmData_md_daily,"GPM_3IMERGDF.06")
    
-   # Pre-process TODO see quality
+   # Pre-process TODO check quality
    rasts_gpmDay<-path_to_gpmDay %>%
      mutate(rast=future_map(destfile,~prepareData_gpm(.,"precipitationCal",TRUE,gpmDay_resample_output_res))) %>%  # TRUE means that we resample the dataset
      pluck("rast") %>%
      set_names(path_to_gpmDay$name)
    
   # Extract
-   cat("Extracting daily precipitations...\n")
-   rain_gpmDay<-extractVar(buffer_sizes,dates_loc,rastsNames_GpmDay,rasts_gpmDay,"rain_gpmDay")
+   cat("Extracting daily precipitations (gpm)...\n")
+   rain_gpmDay<-extractVar(buffer_sizes,dates_loc,rastsNames_gpmDay,rasts_gpmDay,"rain_gpmDay")
    rm(rasts_gpmDay)
    
    ## Rainfall on the HCL date 
@@ -408,14 +413,14 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
    # Build paths to data
    path_to_gpmHhour<-getPaths(gpmData_md_hhourly,"GPM_3IMERGHH.06")
    
-   # Pre-process TODO see quality
+   # Pre-process TODO check quality
    rasts_gpmHhour<-path_to_gpmHhour %>%
      mutate(rast=future_map(destfile,~prepareData_gpm(.,"precipitationCal",TRUE,gpmHhour_resample_output_res))) %>%  # TRUE means that we resample the dataset
      pluck("rast") %>%
      set_names(path_to_gpmHhour$name)
    
    # Extract
-   cat("Extracting half hourly precipitations...\n")
+   cat("Extracting half hourly precipitations (gpm)...\n")
    rain_gpmHhour<-extractVar(buffer_sizes=10,dates_loc,rastsNames_gpmHhour,rasts_gpmHhour,"rain_gpmHhour") # we put buffer_sizes=10 to extract the half-hourly rainfall at the HLC position only (ie not in a buffer)
   # Output is the rainfall for each half hour. To summarize for the whole night : 
    rain_hhour<-rain_hhour %>%
@@ -424,4 +429,64 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
    
    
    ######################## 3/ TAMSAT #######################
+   
+   tamsat_md<-data.frame(output_time_step=c("daily"), #,"monthly","monthly"),
+                         output_product=c("rainfall_estimate"), #,"rainfall_estimate","anomaly"),
+                         output_output=c("individual"), #,"individual","individual"),
+                         stringsAsFactors = F) %>%
+     mutate(source=paste(output_time_step,output_product,output_output,sep="_"))  %>%
+    mutate(destFolder=file.path(path_to_processing_folder,"TAMSAT",source)) 
+   
+   tamsatData_md<-dates %>%
+     set_names(as.numeric(.)) %>% # names will be numeric format of the dates (days since 1970-01-01)
+     map(~pmap(list(.,pluck(tamsat_md,"destFolder"),pluck(tamsat_md,"output_time_step"),pluck(tamsat_md,"output_product"),pluck(tamsat_md,"output_output")),
+               ~getData_tamsat(time_range = c(..1-lagTime_timeSeries,..1),
+                            destFolder=..2,
+                            output_time_step=..3,
+                            output_product=..4,
+                            output_output=..5)) %>%
+                        set_names(pluck(tamsat_md,"source")))
+   
+   ## Download datasets
+   # First create directories in the wd
+   directories<-tamsat_md$destFolder %>%
+     as.character() %>%
+     as.list()  %>%
+     lapply(dir.create,recursive = TRUE)
+   
+   # Then download
+   df_DataToDL<-tamsatData_md %>%
+     modify_depth(2, ~map2(.x=pluck(.,"url"),.y=pluck(.,"destfile"),cbind)) %>%
+     flatten %>%
+     flatten %>%
+     do.call(rbind,.) %>%
+     data.frame(stringsAsFactors = F) %>%
+     distinct %>%
+     set_names("url","destfile")
+   
+   Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,parallelDL=TRUE)
+   
+   
+   ############ Process TAMSAT time series
+   
+   ## Daily rainfall
+   # Get the names of the rasters to use for each date
+   rastsNames_tamsatRain<-getRasters_timeSeries(dates_loc,tamsatData_md,"daily_rainfall_estimate_individual")
+   
+   # Build paths to data
+   path_to_tamsatRain<-getPaths(tamsatData_md,"daily_rainfall_estimate_individual")
+   
+   # Pre-process
+   rasts_tamsatRain<-path_to_tamsatRain %>%
+     mutate(rast=future_map(destfile,~prepareData_tamsat(.,roi,TRUE,tamsatDay_resample_output_res))) %>%  # TRUE means that we resample the dataset
+     pluck("rast") %>%
+     set_names(path_to_tamsatRain$name)
+   
+   # Extract
+   cat("Extracting daily precipitations (tamsat)...\n")
+   rain_tamsatDay<-extractVar(buffer_sizes,dates_loc,rastsNames_tamsatRain,rasts_tamsatRain,"rain_tamsatDay")
+   
+   
+   ## compare gpm and tamsat
+   #rain_gpm_tamsat<-merge(data.table(rain_gpmDay %>% filter(buffer==2000)),data.table(rain_tamsatDay %>% filter(buffer==2000)),by=c("idpointdecapture","buffer","time_lag"))
    

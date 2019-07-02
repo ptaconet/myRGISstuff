@@ -1,7 +1,7 @@
 
 
 # Build openDAP modis URL for a given collection, time range and ROI, to retrieve the data in the ROI and for the closest available dates to the one provided
-getData_modis<-function(time_range=c("2010-01-01","2010-01-30"), # mandatory. either a time range (e.g. c(date_start,date_end) ) or a single date e.g. ( date_start )
+getData_modis<-function(time_range=as.Date(c("2010-01-01","2010-01-30")), # mandatory. either a time range (e.g. c(date_start,date_end) ) or a single date e.g. ( date_start )
                         roi=st_read("/home/ptaconet/r_react/getData/ROI_test.kml",quiet=T), # either provide roi (sf point or polygon) or provide roiSpatialIndexBound. if roiSpatialIndexBound is not provided, it will be calculated from roi
                         username=NULL, # EarthData user name
                         password=NULL, # EarthData password
