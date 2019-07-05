@@ -11,13 +11,15 @@ getData_tamsat<-function(time_range=as.Date(c("2017-01-01","2017-01-30")), # man
   
   time_range<-as.Date(time_range, origin="1970-01-01")
   
-  urls<-seq(time_range[2],time_range[1],-1) %>%
+  datesToRetrieve<-seq(time_range[2],time_range[1],-1) %>%
     data.frame(stringsAsFactors = F) %>%
     set_names("date") %>%
     mutate(date_character=as.character(as.Date(date))) %>%
     mutate(year=format(date,'%Y')) %>%
     mutate(month=format(date,'%m')) %>%
-    mutate(day=format(date,'%d'))   %>%   
+    mutate(day=format(date,'%d'))
+    
+  urls<-datesToRetrieve %>%
     mutate(product_name_daily_rain_individual=paste0("rfe",year,"_",month,"_",day,".v3.nc")) %>%
     mutate(url_product_daily_rain_individual=paste0(url_tamsat_data,"/",year,"/",month,"/",product_name_daily_rain_individual)) %>%
     mutate(product_name_daily_rain_yearly=paste0("TAMSATv3.0_rfe_daily_",year,".zip")) %>%

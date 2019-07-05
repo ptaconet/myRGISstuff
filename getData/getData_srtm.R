@@ -1,4 +1,4 @@
-getData_srtm<-function(roi,
+getData_srtm<-function(roi=st_read("/home/ptaconet/r_react/getData/ROI_test.kml",quiet=T),
                        download=FALSE, # TRUE will download the file and return a list with : the URL, the path to the output file, a boolean wether the dataset was properly downloaded or not. FALSE will return a list with the URL only
                        destFolder=NULL
                        ){

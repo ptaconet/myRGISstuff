@@ -22,7 +22,7 @@ getData_gpm<-function(time_range=as.Date(c("2010-01-01","2010-01-30")), # mandat
     #times_gpm_hhourly<-seq(from=as.POSIXlt(paste0(this_date_hlc," ",hh_rainfall_hour_begin,":00:00")),to=as.POSIXlt(as.POSIXlt(paste0(this_date_hlc+1," ",hh_rainfall_hour_end,":00:00"))),by="30 min")
     time_range=as.POSIXlt(time_range)
     
-    urls<-seq(from=time_range[2],to=time_range[1],by="-30 min") %>%
+    datesToRetrieve<-seq(from=time_range[2],to=time_range[1],by="-30 min") %>%
       data.frame(stringsAsFactors = F) %>%
       set_names("date") %>%
       mutate(date_character=as.character(as.Date(date))) %>%
@@ -32,7 +32,9 @@ getData_gpm<-function(time_range=as.Date(c("2010-01-01","2010-01-30")), # mandat
       mutate(hour_start=paste0(sprintf("%02d",hour(date)),sprintf("%02d",minute(date)),sprintf("%02d",second(date)))) %>%
       mutate(hour_end=date+minutes(29)+seconds(59)) %>%
       mutate(hour_end=paste0(sprintf("%02d",hour(hour_end)),sprintf("%02d",minute(hour_end)),sprintf("%02d",second(hour_end)))) %>%
-      mutate(number_minutes_from_start_day=sprintf("%04d",difftime(date,as.POSIXlt(paste0(as.Date(date)," 00:00:00")),units="mins"))) %>%
+      mutate(number_minutes_from_start_day=sprintf("%04d",difftime(date,as.POSIXlt(paste0(as.Date(date)," 00:00:00")),units="mins")))
+      
+    urls<-datesToRetrieve %>% 
       mutate(product_name=paste0("3B-HHR.MS.MRG.3IMERG.",gsub("-","",date_character),"-S",hour_start,"-E",hour_end,".",number_minutes_from_start_day,".V06B.HDF5")) %>%
       mutate(url_product=paste(OpenDAPServerUrl,OpenDAPCollection,year,day,product_name,sep="/"))
     
@@ -40,12 +42,14 @@ getData_gpm<-function(time_range=as.Date(c("2010-01-01","2010-01-30")), # mandat
 
     time_range=as.Date(time_range,origin="1970-01-01")
     
-    urls<-seq(time_range[2],time_range[1],-1) %>%
+    datesToRetrieve<-seq(time_range[2],time_range[1],-1) %>%
       data.frame(stringsAsFactors = F) %>%
       set_names("date") %>%
       mutate(date_character=as.character(as.Date(date))) %>%
       mutate(year=format(date,'%Y')) %>%
-      mutate(month=format(date,'%m')) %>%
+      mutate(month=format(date,'%m'))
+      
+    urls<-datesToRetrieve %>% 
       mutate(product_name=paste0("3B-DAY.MS.MRG.3IMERG.",gsub("-","",date_character),"-S000000-E235959.V06.nc4")) %>%
       mutate(url_product=paste(OpenDAPServerUrl,OpenDAPCollection,year,month,product_name,sep="/"))
     

@@ -31,9 +31,11 @@ buffer_sizes<-c(500,1000,2000)
 gpmDay_resample_output_res=250
 gpmHhour_resample_output_res=250
 tamsatDay_resample_output_res=250
+era5_resample_output_res=250
 gpmHhour_hour_start<-"18"
 gpmHhour_hour_end<-"08"
-
+era5_hour_start<-"18"
+era5_hour_end<-"08"
 setwd(path_to_processing_folder)
 
 
@@ -51,6 +53,7 @@ require(httr)
 require(furrr)
 require(rgeos)
 require(lubridate)
+
 source("/home/ptaconet/r_react/getData/getData_modis.R")
 source("/home/ptaconet/r_react/getData/prepareData_modis.R")
 source("/home/ptaconet/r_react/getData/getDataFromOpenDAP_ancillaryFunctions.R")
@@ -60,7 +63,9 @@ source("/home/ptaconet/r_react/getData/getData_gpm.R")
 source("/home/ptaconet/r_react/getData/prepareData_gpm.R")
 source("/home/ptaconet/r_react/getData/getData_tamsat.R")
 source("/home/ptaconet/r_react/getData/prepareData_tamsat.R")
-
+source("/home/ptaconet/r_react/getData/getData_viirsDnb.R")
+source("/home/ptaconet/r_react/getData/getData_imcce.R")
+source("/home/ptaconet/r_react/getData/getData_era5.R")
 
 ## Connection to the EarthData servers
 earthdata_credentials<-readLines(path_to_earthdata_credentials)
@@ -68,8 +73,28 @@ username_EarthData<-strsplit(earthdata_credentials,"=")[[1]][2]
 password_EarthData<-strsplit(earthdata_credentials,"=")[[2]][2]
 httr::set_config(authenticate(user=username_EarthData, password=password_EarthData, type = "basic"))
 
+########## Specific for ERA INTERIM (instructions to install the clients and use the python environment, more info here : https://dominicroye.github.io/en/2018/access-to-climate-reanalysis-data-from-r/#era-interim)
 
-hlc_dates_loc<-read.csv(path_to_csv_hlc_dates_loc)
+require(reticulate)
+
+##Set virtual env and install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client") #(from https://community.rstudio.com/t/problem-installing-python-libraries-with-reticulate-py-install-error-pip-not-found/26561/2)
+#system("virtualenv -p /usr/bin/python2 /home/ptaconet/.virtualenvs/py2-virtualenv")
+##Also works with this: virtualenv_create("py3-virtualenv", python = "/usr/bin/python3")
+#reticulate::use_virtualenv("py2-virtualenv")
+##install the python ECMWF API
+#reticulate::py_install("ecmwf-api-client", envname = "py2-virtualenv")
+## For ERA-5 :
+#system("pip install cdsapi")
+######################################################""
+## Parameters for download of ERA 5 data
+#import python CDS-API
+cdsapi <- reticulate::import('cdsapi')
+#for this step there must exist the file .cdsapirc in the root directory of the computer (e.g. "/home/ptaconet")
+server = cdsapi$Client() #start the connection
+
+
+hlc_dates_loc<-read.csv(path_to_csv_hlc_dates_loc,stringsAsFactors = F)
 
 ## Get ROI as sf object. We extend a bit the size of the bbox (of the max of the buffer size + 0.05°)
 bbox_4326<-SpatialPointsDataFrame(coords=data.frame(hlc_dates_loc$longitude,hlc_dates_loc$latitude),data=hlc_dates_loc,proj4string=CRS("+init=epsg:4326")) %>% bbox
@@ -79,7 +104,7 @@ roi<-rgeos::bbox2SP(bbox_4326[2,2],bbox_4326[2,1],bbox_4326[1,1],bbox_4326[1,2],
 
 
 ##
-dates_loc<- hlc_dates_loc %>% 
+dates_loc<-hlc_dates_loc %>% 
   mutate(date_capture=as.Date(date_capture)) %>%
   group_by(date_capture) %>%
   arrange(date_capture) %>%
@@ -115,7 +140,8 @@ extractVar_singleBuff<-function(rasts,names_rasts_to_use,spPoints,buffer_size){
     set_names(seq(0,ncol(.)-1,1)) %>%   ## to name by the lag index 
     mutate(idpointdecapture=as.character(spPoints$idpointdecapture)) %>%
     mutate(buffer=buffer_size) %>%
-    gather(time_lag,val,-c(idpointdecapture,buffer))
+    gather(time_lag,val,-c(idpointdecapture,buffer)) %>%
+    mutate(time_lag=as.numeric(time_lag))
   
   return(res) # to put in wide format : res <- res %>% unite(var,var,time_lag)) %>% spread(key=var,value=val)
 }
@@ -135,6 +161,22 @@ extractVar<-function(buffer_sizes,dates_loc,names_rasts_to_use,rasters,var_name)
 }
 
 
+# Build dataframe of data to DL
+getDftoDl<-function(Data_md){
+  
+  DftoDl<- Data_md %>%
+  modify_depth(2, ~map2(.x=pluck(.,"url"),.y=pluck(.,"destfile"),cbind)) %>%
+  flatten %>%
+  flatten %>%
+  do.call(rbind,.) %>%
+  data.frame(stringsAsFactors = F) %>%
+  distinct %>%
+  set_names("url","destfile")
+
+  return(DftoDl)
+  
+}
+
 # Get the names of the rasters to use for each date
 getRasters_timeSeries<-function(dates_loc,xxxData_md,dataCollection){
   rastsNames<-map(dates_loc$date_numeric,~pluck(xxxData_md,as.character(.))) %>%
@@ -147,6 +189,7 @@ getRasters_timeSeries<-function(dates_loc,xxxData_md,dataCollection){
 # Get the path of local datasets
 getPaths<-function(xxxData_md,dataCollection){
   path<-modify(xxxData_md,dataCollection) %>%
+    map(~list_modify(.,"url" = NULL)) %>%
     map(data.frame) %>%
     reduce(bind_rows) %>%
     dplyr::select(name,destfile) %>%
@@ -210,15 +253,7 @@ directories<-modisOpenDAP_md$source %>%
   lapply(dir.create,recursive = TRUE)
 
 # Then download
-df_DataToDL<-modisData_md %>%
-  modify_depth(2, ~map2(.x=pluck(.,"url"),.y=pluck(.,"destfile"),cbind)) %>% 
-  flatten %>% 
-  flatten %>% 
-  do.call(rbind,.) %>% 
-  data.frame(stringsAsFactors = F) %>% 
-  distinct %>% 
-  set_names("url","destfile")
-
+df_DataToDL<-getDftoDl(modisData_md)
 Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,username_EarthData,password_EarthData,TRUE)
 
   
@@ -373,16 +408,7 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
      lapply(dir.create,recursive = TRUE)
    
    # Then download
-   df_DataToDL<-gpmData_md_daily %>%
-     append(gpmData_md_hhourly) %>%
-     modify_depth(2, ~map2(.x=pluck(.,"url"),.y=pluck(.,"destfile"),cbind)) %>% 
-     flatten %>% 
-     flatten %>% 
-     do.call(rbind,.) %>% 
-     data.frame(stringsAsFactors = F) %>% 
-     distinct %>% 
-     set_names("url","destfile")
-   
+   df_DataToDL<-rbind(getDftoDl(gpmData_md_daily),getDftoDl(gpmData_md_hhourly))
    Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,username_EarthData,password_EarthData,TRUE)
    
 
@@ -455,15 +481,7 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
      lapply(dir.create,recursive = TRUE)
    
    # Then download
-   df_DataToDL<-tamsatData_md %>%
-     modify_depth(2, ~map2(.x=pluck(.,"url"),.y=pluck(.,"destfile"),cbind)) %>%
-     flatten %>%
-     flatten %>%
-     do.call(rbind,.) %>%
-     data.frame(stringsAsFactors = F) %>%
-     distinct %>%
-     set_names("url","destfile")
-   
+   df_DataToDL<-getDftoDl(tamsatData_md)
    Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,parallelDL=TRUE)
    
    
@@ -490,3 +508,162 @@ rastsNames_modLst<-getRasters_timeSeries(dates_loc,modisData_md,"MOD11A1.006")
    ## compare gpm and tamsat
    #rain_gpm_tamsat<-merge(data.table(rain_gpmDay %>% filter(buffer==2000)),data.table(rain_tamsatDay %>% filter(buffer==2000)),by=c("idpointdecapture","buffer","time_lag"))
    
+   
+   ######################## 4/ VIIRS DNB #######################
+   
+   viirsDnbData_md<-dates %>%
+     set_names(as.numeric(.)) %>% # names will be numeric format of the dates (days since 1970-01-01)
+     map(~map(.,
+              ~getData_viirsDnb(time_range = .,
+                           roi=roi,
+                           dimensionsToRetrieve=c("Monthly_AvgRadiance","Monthly_CloudFreeCoverage"),
+                           destFolder=file.path(path_to_processing_folder,"viirs_dnb"))) %>%
+     set_names("viirs_dnb"))
+   
+   
+   ## Download datasets
+   # First create directories in the wd
+   directories<-dir.create(file.path(path_to_processing_folder,"viirs_dnb"))
+   
+   # Then download
+   df_DataToDL<-getDftoDl(viirsDnbData_md)
+   Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,parallelDL=TRUE)
+   
+   
+   ############ Process VIIRS DNB time series
+   
+   # Get the names of the rasters to use for each date
+   rastsNames_viirsDnb<-getRasters_timeSeries(dates_loc,viirsDnbData_md,"viirs_dnb") %>%
+     map(~keep(.,str_detect(.,"Monthly_AvgRadiance")))
+
+   # Build paths to data
+   path_to_viirsDnb_AvgRadiance<-getPaths(viirsDnbData_md,"viirs_dnb") %>%
+     mutate(date=substr(name,nchar(name)-4,nchar(name))) %>%
+     filter(str_detect(name,"AvgRadiance")) %>%
+     set_names(c("name_AvgRadiance","destfile_AvgRadiance","date"))
+
+   path_to_viirsDnb_CloudFreeCoverage<-getPaths(viirsDnbData_md,"viirs_dnb") %>%
+     mutate(date=substr(name,nchar(name)-4,nchar(name))) %>%
+     filter(str_detect(name,"CloudFreeCoverage")) %>%
+     set_names(c("name_CloudFreeCoverage","destfile_CloudFreeCoverage","date"))
+   
+   path_to_viirsDnb<-merge(path_to_viirsDnb_AvgRadiance,path_to_viirsDnb_CloudFreeCoverage,by="date")
+
+   # Pre-process
+   rasts_viirsDnb<-path_to_viirsDnb %>%
+     mutate(rast_AvgRadiance=map(destfile_AvgRadiance,~raster(.))) %>% 
+     mutate(rast_CloudFreeCoverage=map(destfile_CloudFreeCoverage,~raster(.))) %>% 
+     mutate(rast_CloudFreeCoverage=map(rast_CloudFreeCoverage,~clamp(.x,lower=1,useValues=FALSE))) %>% # Quality control : if there are 0 cloud free obs, we set the pixel to NA
+     mutate(rast=map2(rast_AvgRadiance,rast_CloudFreeCoverage,~mask(.x,.y))) %>%
+     pluck("rast") %>%
+     set_names(path_to_viirsDnb_AvgRadiance$name)
+
+   # Extract
+   cat("Extracting nighttime lights (VIIRS DNB...\n")
+   Nightlight<-extractVar(buffer_sizes,dates_loc,rastsNames_viirsDnb,rasts_viirsDnb,"Nightlight")
+   rm(rasts_viirsDnb)
+   
+   
+   ######################## 5/ Ephemeris of the Moon #######################
+   
+   moonData_md<-dates %>%
+     set_names(as.numeric(.)) %>% # names will be numeric format of the dates (days since 1970-01-01)
+     map(~map(.,
+              ~getData_imcce(time_range = .,
+                                  roi=roi,
+                                  destFolder=file.path(path_to_processing_folder,"moon_imcce"))) %>%
+           set_names("moon_imcce"))
+   
+   ## Download datasets
+   # First create directories in the wd
+   directories<-dir.create(file.path(path_to_processing_folder,"moon_imcce"))
+   
+   # Then download
+   df_DataToDL<-getDftoDl(moonData_md)
+   Dl_res<-downloadData(df_DataToDL$url,df_DataToDL$destfile,parallelDL=TRUE)
+   
+   ############ Process Moon
+   
+   # Get the names of the files to use for each date
+   DfNames_moon<-getRasters_timeSeries(dates_loc,moonData_md,"moon_imcce") %>%
+     unlist() %>%
+     cbind(names(moonData_md)) %>%
+     data.frame(stringsAsFactors = F) %>%
+     set_names(c("name","date_capture"))
+
+   # Build paths to data
+   path_to_moon<-getPaths(moonData_md,"moon_imcce")
+   
+   # Pre-process
+   moon_magnitude_dfs<-path_to_moon %>% 
+     mutate(df=map(destfile,~read.csv(.,skip=10))) %>% 
+     mutate(V.Mag=map(df,"V.Mag"))
+   
+  # Extract for each point
+   moonMag<-hlc_dates_loc %>%
+     select(idpointdecapture,date_capture) %>%
+     mutate(date_capture=as.character(as.numeric(as.Date(date_capture)))) %>%
+     left_join(rastsNames_moon,by="date_capture") %>%
+     left_join(moon_magnitude_dfs,by="name") %>%
+     select(idpointdecapture,V.Mag) %>%
+     set_names("idpointdecapture","val") %>%
+     mutate(var="moonMag") %>%
+     mutate(time_lag=0) %>%
+     mutate(buffer=NA) %>%
+     dplyr::select(idpointdecapture,buffer,var,time_lag,val)
+
+     
+   ######################## 6/ Wind #######################
+   
+   ## Build list of datasets
+   
+   era5_md<-data.frame(dimensionsToRetrieve=c("10m_u_component_of_wind","10m_v_component_of_wind"),
+                       stringsAsFactors = F) %>%
+     mutate(source=dimensionsToRetrieve)
+     
+   era5Data_md<-dates %>%
+     set_names(as.numeric(.)) %>% # names will be numeric format of the dates (days since 1970-01-01)
+     map(~pmap(list(.,pluck(era5_md,"source"),pluck(era5_md,"dimensionsToRetrieve")),
+               ~getData_era5(time_range = c(paste0(as.Date(..1,origin="1970-01-01")," ",era5_hour_start,":00:00"),paste0(as.Date(..1,origin="1970-01-01")+1," ",era5_hour_end,":00:00")),
+                            roi=roi,
+                            destFolder=file.path(path_to_processing_folder,..2),
+                            dimensionsToRetrieve=..3)) %>%
+           set_names(era5_md$source))
+   
+   ## Download datasets
+   # First create directories in the wd
+   directories<-era5_md$source %>% 
+     file.path(path_to_processing_folder,.) %>%
+     as.list()  %>%
+     lapply(dir.create,recursive = TRUE)
+   
+   # Then download
+   # for now we have not found a better solution that making a standard "for" loop (it does not work as expected with purrr)
+   for (i in 1:length(era5Data_md)){
+     for (j in 1:length(era5Data_md[[i]]))
+     server$retrieve("reanalysis-era5-single-levels",
+                     era5Data_md[[i]][[j]]$url,
+                     era5Data_md[[i]][[j]]$destfile)
+   }
+   
+   ############ Process Wind
+   
+   
+   # Get the names of the rasters to use for each date
+   rastsNames_era5<-getRasters_timeSeries(dates_loc,era5Data_md,"10m_u_component_of_wind")
+   
+   # Build paths to data
+   path_to_u_wind<-getPaths(era5Data_md,"10m_u_component_of_wind")
+   path_to_v_wind<-getPaths(era5Data_md,"10m_v_component_of_wind")
+   path_to_u_v_wind<-merge(path_to_u_wind,path_to_v_wind,by="name",suffixes = c("_u","_v"))
+   
+   
+  ## TODO to finish... 
+   a<-dates %>%
+     data.frame() %>%
+     set_names("date") %>%
+     mutate(time_start=as_datetime(paste0(as.Date(date,origin="1970-01-01")," ",era5_hour_start,":00:00"))) %>%
+     mutate(time_end=as_datetime(paste0(as.Date(date,origin="1970-01-01")+1," ",era5_hour_end,":00:00")))
+     
+   
+  
