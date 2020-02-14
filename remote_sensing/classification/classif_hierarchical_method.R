@@ -173,6 +173,7 @@ rf_standard_classif_function<-function(ground_truth_df,
   model<-randomForest::randomForest(response ~ ., data=ground_truth_df, ntree=rf_optimum_parameters[[1]][1], mtry=rf_optimum_parameters[[2]][1])
   } else {
     model<-randomForest::randomForest(response ~ ., data=ground_truth_df)
+    rf_optimum_parameters<-NULL
   }
   # confusion matrix, VarImpPlot, classif statistics, typical decision tree
   conf <- caret::confusionMatrix(data = model$predicted, reference = ground_truth_df$response)

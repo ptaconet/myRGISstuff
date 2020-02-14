@@ -1,0 +1,47 @@
+code,type,short_name,long_name,unit,temporality,data_sources
+TND,Temperature,Daily minimum temperature,Average daily minimum land surface temperature,celcius degrees,40 days before the HLC night,"MOD11A1.v006
+MYD11A1.v006
+MOD11A2.v006
+MYD11A2.v006"
+TMD,Temperature,Daily maximum temperature,Average daily maximum land surface temperature,celcius degrees,40 days before the HLC night,"MOD11A1.v006
+MYD11A1.v006
+MOD11A2.v006
+MYD11A2.v006"
+TNW,Temperature,Weekly minimum temperature,Average 8-days average minimum land surface temperature,celcius degrees,40 days before the HLC night,"MOD11A2.v006
+MYD11A2.v006"
+TMW,Temperature,Weekly maximum temperature,Average 8-days average maximum land surface temperature,celcius degrees,40 days before the HLC night,"MOD11A2.v006
+MYD11A2.v006"
+RTD,Precipitation,Daily rainfall (source: TAMSAT),Average daily total precipitation (source : TAMSAT),mm,40 days before the HLC night,TAMSAT
+RGD,Precipitation,Daily rainfall (source: GPM),Average daily total precipitation (source : GPM),mm,40 days before the HLC night,GPM_3IMERGDF
+EVT,Evapotranspiration,Evapotranspiration,Average 8-days average of evapotranspiration,kg/m²/8day,40 days before the HLC night,"MOD16A2.v006
+MYD16A2.v006"
+VNI,Vegetation,Normalized Difference Vegetation Index,Average 8-days average of Normalized Difference Vegetation Index,unitless,40 days before the HLC night,"MOD13Q1.v006
+MYD13Q1.v006"
+VEI,Vegetation,Enhanced Vegetation Index,Average 8-days average of Enhanced Vegetation Index,unitless,40 days before the HLC night,"MOD13Q1.v006
+MYD13Q1.v006"
+RGH,Precipitation,Half-houly rainfall,Proportion of half-hours with positive precipitation for the whole duration of HLC,%,HLC night,GPM_3IMERGHH
+WDR,Wind,Wind direction,Mean of wind direction during the HLC night,degrees (0 to 360),HLC night,ERA5
+WSP,Wind,Wind speed,Mean of wind speed during the HLC night,m/s,HLC night,ERA5
+LMN,Light/Moon,Apparent magnitude of the Moon,Apparent magnitude of the Moon on the HLC night,unitless,HLC night,MIRIADE
+LNL,Light/Settlements,Nightly radiance,Monthly average radiance on the HLC night,NanoWatt/cm2/sr,HLC night,VIIRS DNB
+TEL,Topography,Elevation,Mean elevation,meters above the see,No temporality,SRTMGL1_v003
+TSL,Topography,Slope,Mean slope,%,No temporality,SRTMGL1_v003
+TAS,Topography,Aspect,Mean aspect,,No temporality,SRTMGL1_v003
+TCI,Topography,Terrain Classification Index,Mean TCI,unitless,No temporality,SRTMGL1_v003
+TWI,Topography,Topographic Wetness Index,Mean TWI,unitless,No temporality,SRTMGL1_v003
+WAC,Water,Accumulation,Mean accumulation,ha,No temporality,SRTMGL1_v003
+WAD,Water,Average distance to stream,Average distance to stream,m,No temporality,SRTMGL1_v003
+WMD,Water,Distance to closest stream,Distance to closest stream,m,No temporality,SRTMGL1_v003
+WLS,Water,Total length of stream,Total length of stream,m,No temporality,SRTMGL1_v003
+WAL,Water,Accumulation * distance to catch point,Accumulation * distance to catch point,ha/m,No temporality,SRTMGL1_v003
+POP,Population,Population,Total population of the village,person,No temporality,Own surveys
+POD,Population,Population density,Population density of the village,person/ha,No temporality,Own surveys
+BDE,Built-up,Distance to the edge of the village,Distance from the HLC point to the nearest edge of the village,m,No temporality,Own surveys
+BCH,Built-up,Clustering of the households in the village,Degree of clustering or ordering of the households in each village,NA,No temporality,Own surveys
+BVS,Built-up,Built-up surface of the village,Surface of built-up area in the village,m²,No temporality,SPOT6/7
+BCD,Built-up,Buit-up density at the proximity of each catch point (100 m buffer),Proportion of built-up area in a buffer of 100 meters around each catch point,m²,No temporality,SPOT6/7
+HYS,Pedology,Proportion of hydromorphic soils,Proportion of hydromorphic soils,%,No temporality,
+,Land cover,,,,No temporality,"SPOT6/7
+SENTINEL 2
+SRTMGL1_v003
+Own surveys"

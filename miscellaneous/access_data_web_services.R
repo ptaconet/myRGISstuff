@@ -21,7 +21,7 @@
 rm(list = ls())
 
 ## Global parameters
-path_to_processing_folder<-"/home/ptaconet/Documents/react/data_BF"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
+path_to_processing_folder<-"/home/ptaconet/Documents/react/data_CIV"  #<Path to the processing folder (i.e. where all the data produced by the workflow will be stored)>
 path_to_grassApplications_folder<-"/usr/lib/grass74" #<Can be retrieved with grass74 --config path . More info on the use of rgrass7 at https://grasswiki.osgeo.org/wiki/R_statistics/rgrass7
 path_to_earthdata_credentials<-"credentials_earthdata.txt" # path to the file containing the credential to the NASA servers (EarthData)
 
@@ -88,7 +88,7 @@ buffer_sizes_meters=c(500,1000,2000)
 
 ####################################################################################################
 ########## SPECIFIC TO OUR CASE : Create the various files/datasets to use as input of this script from the project database #########
-codepays<-"BF"
+codepays<-"CI"
 source("/home/ptaconet/r_react/create_input_datasets_script_model.R")
 ########## END Specific to our case ##########
 ####################################################################################################
@@ -117,6 +117,7 @@ require(purrr)
 require(spatstat)
 require(maptools)
 require(geojsonsf)
+require(osmdata)
 #library(getSpatialData)
 #library(MODIS)
 #library(MODISTools)
@@ -443,6 +444,9 @@ names(dem_and_derivatives_rast)[1]<-"elevation"
 streams_network<-sf::read_sf(streams_network_path)
 streams_network$DN<-seq(1,nrow(streams_network),1)
 
+
+
+## nouvel indicateur : pour chaque segment du stream network : Accumulation de flux * distance séparant le troncon du point de capture (en m4)
 #####################################
 ########### A.1.3 Calculate stats within the buffer ###############
 #####################################
@@ -660,6 +664,62 @@ for (i in 1:length(buffer_sizes_meters)){
 cat("END integration pedology data")
 } 
 
+
+
+##########################################################################
+########### A.4 Roads ###############
+##########################################################################
+
+# See https://github.com/ropensci/osmdata
+
+#####################################
+########### A.1.1 Get / Download the data ###############
+#####################################
+
+roads_osm <- opq(bbox = c(extent(roi_sp_4326)[1], extent(roi_sp_4326)[3], extent(roi_sp_4326)[2], extent(roi_sp_4326)[4])) %>% 
+  add_osm_feature(key = 'highway',value_exact = FALSE) %>%
+  osmdata_sf()
+
+# Remove surface=asphalt
+roads_network<-roads_osm$osm_lines %>% filter(surface != 'asphalt')
+roads_network$DN<-seq(1,nrow(roads_network),1)
+
+#####################################
+########### A.4.3 Calculate stats within the buffer ###############
+#####################################
+
+## Calculate the stats related to hydrographic network (stream network): mean and min distance to stream, total length of stream
+
+dates_locations_hlc_sf<-st_as_sf(dates_locations_hlc_sp)
+# Really not optimized with these loops... but still ok because we do not have too many rows
+for (i in 1:length(buffer_sizes_meters)){
+  
+  # Initialize columns
+  dates_locations_hlc_sp$length_roads<-0
+  dates_locations_hlc_sp$min_dist_to_roads<-NA
+  dates_locations_hlc_sp$mean_dist_to_roads<-NA
+  
+  # Create the buffers
+  buffer<-st_buffer(dates_locations_hlc_sf,dist=buffer_sizes_meters[i])
+  # Get the roads within the buffer 
+  lines_on_buffer<-st_join(buffer,roads_network, join = st_intersects,left = TRUE)
+  
+  for (j in 1:nrow(dates_locations_hlc_sp)){
+    this_pt<-dates_locations_hlc_sf[which(dates_locations_hlc_sf$ID==j),]
+    th_buff_hlc_lines<-lines_on_buffer[which(lines_on_buffer$ID==j),]
+    th_lines_within_buffer<-roads_network[which(roads_network$DN %in% th_buff_hlc_lines$DN),]
+    distances_to_road<-st_distance(this_pt,th_lines_within_buffer)
+    dates_locations_hlc_sp$length_road[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(sum(st_length(th_lines_within_buffer)))
+    dates_locations_hlc_sp$min_dist_to_road[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(min(distances_to_road))
+    dates_locations_hlc_sp$mean_dist_to_road[which(dates_locations_hlc_sp$ID==j)]<-as.numeric(mean(distances_to_road))
+    #print(paste0(i," ",j))
+  }
+  
+  names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))]<-paste0(names(dates_locations_hlc_sp)[which(names(dates_locations_hlc_sp) %in% c("length_stream","min_dist_to_stream","mean_dist_to_stream"))],"_",buffer_sizes_meters[i])
+  
+}
+
+
 ##########################################################################
 ########### A.4 Land use / land cover ###############
 ##########################################################################
@@ -670,7 +730,7 @@ cat("END integration pedology data")
 # To get the list of available landscape metrics : list_lsm()
 
 #####################################
-########### A.1.1 Download the data ###############
+########### A.1.1 Get / Download the data ###############
 #####################################
 
 if(use_lu_lc){
