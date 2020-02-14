@@ -1,4 +1,4 @@
-# RGIS 
+# myRGISstuff
 
 Scripts and functions for GIS stuff with R
 
